@@ -1,0 +1,94 @@
+send_message:
+  name: Send message
+  description: Send a text message to the configured VK chat or user.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Required only when multiple ha-vk entries are configured.
+      example: "01JABCDEF0123456789"
+      selector:
+        text:
+    message:
+      name: Message
+      description: Message text to send.
+      required: true
+      example: "Door opened"
+      selector:
+        text:
+          multiline: true
+    title:
+      name: Title
+      description: Optional title prepended to the message.
+      example: "Home Assistant"
+      selector:
+        text:
+
+send_image:
+  name: Send image
+  description: Download an image by URL and send it to VK messages.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Required only when multiple ha-vk entries are configured.
+      example: "01JABCDEF0123456789"
+      selector:
+        text:
+    image:
+      name: Image URL
+      description: Publicly reachable image URL.
+      required: true
+      example: "http://frigate.local/api/events/123/snapshot.jpg?bbox=1&crop=0"
+      selector:
+        text:
+
+send_video:
+  name: Send video
+  description: Download a video by URL and send it to VK as a video or document.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Required only when multiple ha-vk entries are configured.
+      example: "01JABCDEF0123456789"
+      selector:
+        text:
+    video:
+      name: Video URL
+      description: Publicly reachable video URL.
+      required: true
+      example: "http://frigate.local/api/events/123/clip.mp4"
+      selector:
+        text:
+    type:
+      name: Send type
+      description: Use `video` for normal VK videos or `document` to force document upload.
+      default: video
+      selector:
+        select:
+          options:
+            - video
+            - document
+
+send_post:
+  name: Send wall post
+  description: Publish a post on the configured VK group wall.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Required only when multiple ha-vk entries are configured.
+      example: "01JABCDEF0123456789"
+      selector:
+        text:
+    message:
+      name: Message
+      description: Text of the post.
+      required: true
+      example: "Пост с картинкой"
+      selector:
+        text:
+          multiline: true
+    image:
+      name: Image URL
+      description: Optional image URL to attach to the post.
+      example: "http://frigate.local/api/events/123/snapshot.jpg?bbox=1&crop=0"
+      selector:
+        text:

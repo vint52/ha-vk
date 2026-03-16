@@ -1,0 +1,115 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add ha-vk",
+        "description": "Create a VK notification profile.",
+        "data": {
+          "name": "Notify entity name",
+          "vk_access_token": "VK access token",
+          "vk_peer_id": "VK peer ID",
+          "vk_group_id": "VK group ID",
+          "vk_wall_access_token": "VK wall access token",
+          "vk_api_version": "VK API version",
+          "request_timeout": "Request timeout"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to VK",
+      "invalid_auth": "Authentication failed",
+      "invalid_input": "Invalid configuration value",
+      "vk_error": "VK rejected the configuration"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ha-vk options",
+        "data": {
+          "name": "Notify entity name",
+          "vk_group_id": "VK group ID",
+          "vk_wall_access_token": "VK wall access token",
+          "vk_api_version": "VK API version",
+          "request_timeout": "Request timeout"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to VK",
+      "invalid_auth": "Authentication failed",
+      "invalid_input": "Invalid configuration value",
+      "vk_error": "VK rejected the configuration"
+    }
+  },
+  "services": {
+    "send_message": {
+      "name": "Send message",
+      "description": "Send a text message to the configured VK chat or user.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Required only when multiple ha-vk entries are configured."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Message text to send."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Optional title prepended to the message."
+        }
+      }
+    },
+    "send_image": {
+      "name": "Send image",
+      "description": "Download an image by URL and send it to VK messages.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Required only when multiple ha-vk entries are configured."
+        },
+        "image": {
+          "name": "Image URL",
+          "description": "Publicly reachable image URL."
+        }
+      }
+    },
+    "send_video": {
+      "name": "Send video",
+      "description": "Download a video by URL and send it to VK as a video or document.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Required only when multiple ha-vk entries are configured."
+        },
+        "video": {
+          "name": "Video URL",
+          "description": "Publicly reachable video URL."
+        },
+        "type": {
+          "name": "Send type",
+          "description": "Use `video` for normal VK videos or `document` to force document upload."
+        }
+      }
+    },
+    "send_post": {
+      "name": "Send wall post",
+      "description": "Publish a post on the configured VK group wall.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Required only when multiple ha-vk entries are configured."
+        },
+        "message": {
+          "name": "Message",
+          "description": "Text of the post."
+        },
+        "image": {
+          "name": "Image URL",
+          "description": "Optional image URL to attach to the post."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Добавить ha-vk",
+        "description": "Создайте профиль уведомлений для ВК.",
+        "data": {
+          "name": "Имя notify-сущности",
+          "vk_access_token": "Токен доступа ВК",
+          "vk_peer_id": "VK peer ID",
+          "vk_group_id": "VK group ID",
+          "vk_wall_access_token": "Токен для постов на стене",
+          "vk_api_version": "Версия VK API",
+          "request_timeout": "Таймаут запроса"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Не удалось подключиться к VK",
+      "invalid_auth": "Ошибка авторизации",
+      "invalid_input": "Некорректное значение конфигурации",
+      "vk_error": "VK отклонил конфигурацию"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Параметры ha-vk",
+        "data": {
+          "name": "Имя notify-сущности",
+          "vk_group_id": "VK group ID",
+          "vk_wall_access_token": "Токен для постов на стене",
+          "vk_api_version": "Версия VK API",
+          "request_timeout": "Таймаут запроса"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Не удалось подключиться к VK",
+      "invalid_auth": "Ошибка авторизации",
+      "invalid_input": "Некорректное значение конфигурации",
+      "vk_error": "VK отклонил конфигурацию"
+    }
+  },
+  "services": {
+    "send_message": {
+      "name": "Отправить сообщение",
+      "description": "Отправить текстовое сообщение в настроенный чат или пользователю VK.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Нужен только если настроено несколько записей ha-vk."
+        },
+        "message": {
+          "name": "Сообщение",
+          "description": "Текст сообщения для отправки."
+        },
+        "title": {
+          "name": "Заголовок",
+          "description": "Необязательный заголовок, добавляемый перед текстом."
+        }
+      }
+    },
+    "send_image": {
+      "name": "Отправить изображение",
+      "description": "Скачать изображение по URL и отправить его в сообщения VK.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Нужен только если настроено несколько записей ha-vk."
+        },
+        "image": {
+          "name": "URL изображения",
+          "description": "Публично доступный URL изображения."
+        }
+      }
+    },
+    "send_video": {
+      "name": "Отправить видео",
+      "description": "Скачать видео по URL и отправить его в VK как видео или документ.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Нужен только если настроено несколько записей ha-vk."
+        },
+        "video": {
+          "name": "URL видео",
+          "description": "Публично доступный URL видео."
+        },
+        "type": {
+          "name": "Тип отправки",
+          "description": "Используйте `video` для обычного VK-видео или `document` для принудительной загрузки как документа."
+        }
+      }
+    },
+    "send_post": {
+      "name": "Отправить пост на стену",
+      "description": "Опубликовать пост на стене настроенной группы VK.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Нужен только если настроено несколько записей ha-vk."
+        },
+        "message": {
+          "name": "Сообщение",
+          "description": "Текст поста."
+        },
+        "image": {
+          "name": "URL изображения",
+          "description": "Необязательный URL изображения для вложения в пост."
+        }
+      }
+    }
+  }
+}
