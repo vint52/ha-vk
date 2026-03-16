@@ -4,7 +4,6 @@
 
 [![Home Assistant Custom Integration](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=homeassistant&logoColor=white)](https://github.com/vint52/ha-vk)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5)](https://github.com/vint52/ha-vk?tab=readme-ov-file#installation)
-[![Version](https://img.shields.io/badge/version-0.1.1-blue)](https://github.com/vint52/ha-vk)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)](https://github.com/vint52/ha-vk/blob/main/pyproject.toml)
 
 ![ha-vk logo](custom_components/ha_vk/brand/logo.png)
@@ -51,6 +50,8 @@ The setup flow asks for:
 - `VK wall access token`: optional user token needed for wall posts with images
 - `VK API version`: defaults to `5.131`
 - `Request timeout`: defaults to `30`
+
+Detailed instructions for obtaining all required VK tokens and IDs are available in [`TOKENS.md`](TOKENS.md).
 
 After setup, Home Assistant creates a notify entity named from your chosen title.
 Example: if the title is `ha-vk`, you will get a notify entity such as `notify.ha_vk`.
