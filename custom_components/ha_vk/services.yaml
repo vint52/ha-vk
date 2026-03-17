@@ -1,6 +1,6 @@
 send_message:
   name: Send message
-  description: Send a text message to the configured VK chat or user.
+  description: Send a VK message with optional text, image, or video attachment.
   fields:
     entry_id:
       name: Entry ID
@@ -10,57 +10,32 @@ send_message:
         text:
     message:
       name: Message
-      description: Message text to send.
-      required: true
+      description: Optional message text to send with the attachment.
       example: "Door opened"
       selector:
         text:
           multiline: true
     title:
       name: Title
-      description: Optional title prepended to the message.
+      description: Optional title prepended to the message text.
       example: "Home Assistant"
-      selector:
-        text:
-
-send_image:
-  name: Send image
-  description: Download an image by URL and send it to VK messages.
-  fields:
-    entry_id:
-      name: Entry ID
-      description: Required only when multiple ha-vk entries are configured.
-      example: "01JABCDEF0123456789"
       selector:
         text:
     image:
       name: Image URL
-      description: Publicly reachable image URL.
-      required: true
+      description: Optional publicly reachable image URL. Do not use together with video.
       example: "http://frigate.local/api/events/123/snapshot.jpg?bbox=1&crop=0"
-      selector:
-        text:
-
-send_video:
-  name: Send video
-  description: Download a video by URL and send it to VK as a video or document.
-  fields:
-    entry_id:
-      name: Entry ID
-      description: Required only when multiple ha-vk entries are configured.
-      example: "01JABCDEF0123456789"
       selector:
         text:
     video:
       name: Video URL
-      description: Publicly reachable video URL.
-      required: true
+      description: Optional publicly reachable video URL. Do not use together with image.
       example: "http://frigate.local/api/events/123/clip.mp4"
       selector:
         text:
     type:
       name: Send type
-      description: Use `video` for normal VK videos or `document` to force document upload.
+      description: Used only with video. Select `video` for normal VK videos or `document` to force document upload.
       default: video
       selector:
         select:

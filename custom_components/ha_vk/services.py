@@ -20,35 +20,24 @@ from .const import (
     DOMAIN,
     SEND_TYPE_DOCUMENT,
     SEND_TYPE_VIDEO,
-    SERVICE_SEND_IMAGE,
     SERVICE_SEND_MESSAGE,
     SERVICE_SEND_POST,
-    SERVICE_SEND_VIDEO,
 )
 
-MESSAGE_SERVICE_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_ENTRY_ID): cv.string,
-        vol.Required(ATTR_MESSAGE): cv.string,
-        vol.Optional(ATTR_TITLE): cv.string,
-    }
-)
-
-IMAGE_SERVICE_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_ENTRY_ID): cv.string,
-        vol.Required(ATTR_IMAGE): cv.url,
-    }
-)
-
-VIDEO_SERVICE_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_ENTRY_ID): cv.string,
-        vol.Required(ATTR_VIDEO): cv.url,
-        vol.Optional(ATTR_TYPE, default=SEND_TYPE_VIDEO): vol.In(
-            [SEND_TYPE_VIDEO, SEND_TYPE_DOCUMENT]
-        ),
-    }
+MESSAGE_SERVICE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Optional(CONF_ENTRY_ID): cv.string,
+            vol.Optional(ATTR_MESSAGE): cv.string,
+            vol.Optional(ATTR_TITLE): cv.string,
+            vol.Optional(ATTR_IMAGE): cv.url,
+            vol.Optional(ATTR_VIDEO): cv.url,
+            vol.Optional(ATTR_TYPE, default=SEND_TYPE_VIDEO): vol.In(
+                [SEND_TYPE_VIDEO, SEND_TYPE_DOCUMENT]
+            ),
+        }
+    ),
+    lambda data: _validate_send_message_data(data),
 )
 
 POST_SERVICE_SCHEMA = vol.Schema(
@@ -70,24 +59,10 @@ async def async_register_services(hass: HomeAssistant) -> None:
         client = _resolve_client(hass, call.data)
         try:
             await client.async_send_message(
-                message=call.data[ATTR_MESSAGE],
+                message=call.data.get(ATTR_MESSAGE),
                 title=call.data.get(ATTR_TITLE),
-            )
-        except (VkApiError, VkConfigError) as err:
-            raise HomeAssistantError(str(err)) from err
-
-    async def handle_send_image(call: ServiceCall) -> None:
-        client = _resolve_client(hass, call.data)
-        try:
-            await client.async_send_image(call.data[ATTR_IMAGE])
-        except (VkApiError, VkConfigError) as err:
-            raise HomeAssistantError(str(err)) from err
-
-    async def handle_send_video(call: ServiceCall) -> None:
-        client = _resolve_client(hass, call.data)
-        try:
-            await client.async_send_video(
-                video_url=call.data[ATTR_VIDEO],
+                image_url=call.data.get(ATTR_IMAGE),
+                video_url=call.data.get(ATTR_VIDEO),
                 send_type=call.data[ATTR_TYPE],
             )
         except (VkApiError, VkConfigError) as err:
@@ -111,18 +86,6 @@ async def async_register_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN,
-        SERVICE_SEND_IMAGE,
-        handle_send_image,
-        schema=IMAGE_SERVICE_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SEND_VIDEO,
-        handle_send_video,
-        schema=VIDEO_SERVICE_SCHEMA,
-    )
-    hass.services.async_register(
-        DOMAIN,
         SERVICE_SEND_POST,
         handle_send_post,
         schema=POST_SERVICE_SCHEMA,
@@ -134,8 +97,6 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
 
     for service_name in (
         SERVICE_SEND_MESSAGE,
-        SERVICE_SEND_IMAGE,
-        SERVICE_SEND_VIDEO,
         SERVICE_SEND_POST,
     ):
         if hass.services.has_service(DOMAIN, service_name):
@@ -162,3 +123,15 @@ def _resolve_client(hass: HomeAssistant, service_data: dict[str, Any]):
     raise ServiceValidationError(
         "Multiple ha-vk entries are configured; pass entry_id explicitly"
     )
+
+
+def _validate_send_message_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate a combined text/media message service payload."""
+
+    if not any(data.get(key) for key in (ATTR_MESSAGE, ATTR_IMAGE, ATTR_VIDEO)):
+        raise vol.Invalid("At least one of message, image, or video must be provided")
+
+    if data.get(ATTR_IMAGE) and data.get(ATTR_VIDEO):
+        raise vol.Invalid("Only one of image or video can be provided")
+
+    return data

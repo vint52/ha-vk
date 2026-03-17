@@ -15,6 +15,7 @@ from .const import (
     DEFAULT_API_VERSION,
     DEFAULT_REQUEST_TIMEOUT,
     SEND_TYPE_DOCUMENT,
+    SEND_TYPE_VIDEO,
 )
 
 VK_API_BASE = "https://api.vk.com/method"
@@ -110,6 +111,19 @@ def format_notify_message(message: str, title: str | None = None) -> str:
     return body
 
 
+def format_service_message(message: str | None = None, title: str | None = None) -> str:
+    """Format an optional message body for media service calls."""
+
+    body = (message or "").strip()
+    heading = title.strip() if title else ""
+
+    if heading and body:
+        return f"{heading}\n{body}"
+    if heading:
+        return heading
+    return body
+
+
 class VkClient:
     """Small async wrapper over the VK HTTP API."""
 
@@ -147,19 +161,46 @@ class VkClient:
                     group_id=self._config.group_id,
                 )
 
-    async def async_send_message(self, message: str, title: str | None = None) -> dict[str, Any]:
-        """Send a plain text message."""
+    async def async_send_message(
+        self,
+        message: str | None = None,
+        title: str | None = None,
+        image_url: str | None = None,
+        video_url: str | None = None,
+        send_type: str = SEND_TYPE_VIDEO,
+    ) -> dict[str, Any]:
+        """Send a plain text message or a message with media."""
+
+        if image_url and video_url:
+            raise VkApiError("Only one of image_url or video_url can be provided")
+
+        if image_url:
+            return await self._send_attachment(
+                await self._upload_message_image(image_url),
+                format_service_message(message, title),
+            )
+
+        if video_url:
+            return await self._send_attachment(
+                await self._upload_video_attachment(video_url, send_type),
+                format_service_message(message, title),
+            )
 
         payload = {
             "peer_id": self._config.peer_id,
             "random_id": 0,
-            "message": format_notify_message(message, title),
+            "message": format_notify_message(message or "", title),
         }
         response = await self._api_call("messages.send", token=self._config.access_token, **payload)
         return {"response": response}
 
     async def async_send_image(self, image_url: str) -> dict[str, Any]:
         """Download an image and send it to VK messages."""
+
+        return await self._send_attachment(await self._upload_message_image(image_url))
+
+    async def _upload_message_image(self, image_url: str) -> str:
+        """Upload an image and return its VK attachment identifier."""
 
         content, content_type, filename = await self._download_file(image_url, "image/")
         upload = await self._api_call(
@@ -180,7 +221,7 @@ class VkClient:
             **upload_response,
         )
         photo_info = _first_item(photos, "photo")
-        return await self._send_attachment(_photo_attachment(photo_info))
+        return _photo_attachment(photo_info)
 
     async def async_send_video(
         self,
@@ -189,13 +230,22 @@ class VkClient:
     ) -> dict[str, Any]:
         """Download a video and send it as a VK video or document."""
 
+        return await self._send_attachment(await self._upload_video_attachment(video_url, send_type))
+
+    async def _upload_video_attachment(
+        self,
+        video_url: str,
+        send_type: str,
+    ) -> str:
+        """Upload a video and return its VK attachment identifier."""
+
         content, content_type, filename = await self._download_file(
             video_url,
             ("video/", "application/octet-stream"),
         )
 
         if send_type == SEND_TYPE_DOCUMENT:
-            return await self._send_video_as_document(content, content_type, filename)
+            return await self._save_video_document_attachment(content, content_type, filename)
 
         upload_token = self._config.wall_access_token or self._config.access_token
         try:
@@ -208,9 +258,9 @@ class VkClient:
         except VkApiError as err:
             if self._config.wall_access_token or "group authorization failed" not in str(err).lower():
                 raise
-            return await self._send_video_as_document(content, content_type, filename)
+            return await self._save_video_document_attachment(content, content_type, filename)
 
-        return await self._send_attachment(attachment)
+        return attachment
 
     async def async_send_post(self, message: str, image_url: str | None = None) -> dict[str, Any]:
         """Create a wall post, optionally with an uploaded image."""
@@ -324,6 +374,18 @@ class VkClient:
     ) -> dict[str, Any]:
         """Fallback upload path for videos when video.save is unavailable."""
 
+        return await self._send_attachment(
+            await self._save_video_document_attachment(content, content_type, filename)
+        )
+
+    async def _save_video_document_attachment(
+        self,
+        content: bytes,
+        content_type: str,
+        filename: str,
+    ) -> str:
+        """Upload a video as a document and return its VK attachment identifier."""
+
         upload = await self._api_call(
             "docs.getMessagesUploadServer",
             token=self._config.access_token,
@@ -348,9 +410,7 @@ class VkClient:
         doc_id = doc_info.get("id") or doc_info.get("doc_id")
         if owner_id is None or doc_id is None:
             raise VkApiError("Invalid document data from VK API")
-        return await self._send_attachment(
-            _build_attachment("doc", owner_id, doc_id, doc_info.get("access_key"))
-        )
+        return _build_attachment("doc", owner_id, doc_id, doc_info.get("access_key"))
 
     async def _download_file(
         self,

@@ -1,65 +1,64 @@
 # ha-vk
 
-[English](README.md) | [Русский](README.ru.md)
+[Русский](README.md) | [English](README.en.md)
 
 [![Home Assistant Custom Integration](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=homeassistant&logoColor=white)](https://github.com/vint52/ha-vk)
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5)](https://github.com/vint52/ha-vk?tab=readme-ov-file#installation)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5)](https://github.com/vint52/ha-vk?tab=readme-ov-file#%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)](https://github.com/vint52/ha-vk/blob/main/pyproject.toml)
 
-![ha-vk logo](custom_components/ha_vk/brand/logo.png)
+![Логотип ha-vk](custom_components/ha_vk/brand/logo.png)
 
-[![Open your Home Assistant instance and open the HACS custom repository dialog with this repository pre-filled.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=vint52&repository=ha-vk&category=integration)
+[![Откройте ваш экземпляр Home Assistant и сразу перейдите к добавлению этого репозитория в HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=vint52&repository=ha-vk&category=integration)
 
-VK Client for Home Assistant.
+VK-клиент для Home Assistant.
 
-HACS-installable custom integration for sending VK messages, images, videos, and wall posts directly from Home Assistant without an external HTTP proxy.
+Пользовательская интеграция с поддержкой установки через HACS для отправки сообщений VK, изображений, видео и постов на стену из Home Assistant.
 
-This integration is based on the behavior of the earlier [`vint52/homeassistent_vk_proxy`](https://github.com/vint52/homeassistent_vk_proxy) project and keeps the same functional parity:
+Интеграция основана на логике более раннего проекта [`vint52/homeassistent_vk_proxy`](https://github.com/vint52/homeassistent_vk_proxy) и сохраняет ту же функциональность:
 
-- text messages via `notify`
-- images via `ha_vk.send_image`
-- videos via `ha_vk.send_video`
-- wall posts via `ha_vk.send_post`
+- текстовые сообщения через `notify`
+- текстовые сообщения с необязательным изображением или видео через `ha_vk.send_message`
+- посты на стену через `ha_vk.send_post`
 
-## Installation
+## Установка
 
 ### HACS
 
-`ha-vk` is available as a custom HACS repository.
+`ha-vk` доступен как пользовательский репозиторий HACS.
 
-[![Open your Home Assistant instance and open the HACS custom repository dialog with this repository pre-filled.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=vint52&repository=ha-vk&category=integration)
+[![Откройте ваш экземпляр Home Assistant и сразу перейдите к добавлению этого репозитория в HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=vint52&repository=ha-vk&category=integration)
 
-Use the button above to open this repository directly in HACS.
+Используйте кнопку выше, чтобы открыть этот репозиторий напрямую в HACS.
 
-_or_
+_или_
 
-1. Add this repository to HACS as a custom repository of type `Integration`.
-2. Install `ha-vk`.
-3. Restart Home Assistant.
-4. Go to `Settings -> Devices & services -> Add integration`.
-5. Search for `VK Client for Home Assistant`.
+1. Добавьте этот репозиторий в HACS как пользовательский репозиторий типа `Integration`.
+2. Установите `ha-vk`.
+3. Перезапустите Home Assistant.
+4. Перейдите в `Settings -> Devices & services -> Add integration`.
+5. Найдите `VK Client for Home Assistant`.
 
-## Configuration
+## Конфигурация
 
-The setup flow asks for:
+Во время настройки мастер запросит:
 
-- `Notify entity name`: used as the Home Assistant notify entity name
-- `VK access token`: community token used for messages and uploads
-- `VK peer ID`: user ID or chat peer ID
-- `VK group ID`: required for wall posts
-- `VK wall access token`: optional user token needed for wall posts with images
-- `VK API version`: defaults to `5.131`
-- `Request timeout`: defaults to `30`
+- `Notify entity name`: используется как имя notify-сущности в Home Assistant
+- `VK access token`: токен сообщества для сообщений и загрузки файлов
+- `VK peer ID`: ID пользователя или peer ID чата
+- `VK group ID`: требуется для публикации постов на стену
+- `VK wall access token`: необязательный пользовательский токен, необходимый для постов на стену с изображениями
+- `VK API version`: по умолчанию `5.131`
+- `Request timeout`: по умолчанию `30`
 
-Detailed instructions for obtaining all required VK tokens and IDs are available in [`TOKENS.md`](TOKENS.md).
+Подробная инструкция по получению всех нужных VK-токенов и ID находится в [`TOKENS.md`](TOKENS.md).
 
-After setup, Home Assistant creates a notify entity named from your chosen title.
-Example: if the title is `ha-vk`, you will get a notify entity such as `notify.ha_vk`.
-You can later change this title in the integration options to rename the generated notify entity.
+После завершения настройки Home Assistant создаст notify-сущность с именем на основе выбранного названия.
+Пример: если указать `ha-vk`, будет создана notify-сущность вроде `notify.ha_vk`.
+Позже это название можно изменить в параметрах интеграции, чтобы переименовать созданную notify-сущность.
 
-## Usage
+## Использование
 
-### Text notifications
+### Сообщения и вложения
 
 ```yaml
 action: ha_vk.send_message
@@ -68,7 +67,7 @@ data:
   title: "Home Assistant"
 ```
 
-Or via the Home Assistant notify entity action:
+Или через действие notify-сущности Home Assistant:
 
 ```yaml
 action: notify.send_message
@@ -78,58 +77,60 @@ data:
   title: "Home Assistant"
 ```
 
-`title` is optional. If present, it is prepended to the message body.
+`title` необязателен. Если он указан, то добавляется перед основным текстом сообщения.
 
-### Image
+Отправка изображения тем же сервисом:
 
 ```yaml
-action: ha_vk.send_image
+action: ha_vk.send_message
 data:
+  message: "Снимок с камеры"
   image: "http://frigate.local/api/events/123/snapshot.jpg?bbox=1&crop=0"
 ```
 
-### Video
+Отправка видео тем же сервисом:
 
 ```yaml
-action: ha_vk.send_video
+action: ha_vk.send_message
 data:
+  message: "Клип движения"
   video: "http://frigate.local/api/events/123/clip.mp4"
   type: "video"
 ```
 
-Use `type: document` to force document upload when VK video upload is not desired.
+Используйте `type: document`, если нужно принудительно загружать файл как документ, а не как VK-видео. В одном вызове `ha_vk.send_message` можно передавать только одно из полей `image` или `video`.
 
-### Wall post
+### Пост на стену
 
 ```yaml
 action: ha_vk.send_post
 data:
-  message: "Post with image"
+  message: "Пост с картинкой"
   image: "http://frigate.local/api/events/123/snapshot.jpg?bbox=1&crop=0"
 ```
 
-## Multiple VK accounts or chats
+## Несколько аккаунтов или чатов VK
 
-If you configure multiple ha-vk entries, service calls under `ha_vk.*` must include `entry_id`:
+Если настроено несколько записей `ha-vk`, в вызовах сервисов `ha_vk.*` нужно явно передавать `entry_id`:
 
 ```yaml
 action: ha_vk.send_post
 data:
   entry_id: "01JABCDEF0123456789"
-  message: "Post to a specific profile"
+  message: "Пост в конкретный профиль"
 ```
 
-Each config entry also gets its own notify entity under the `notify` domain.
+Каждая запись конфигурации также получает собственную notify-сущность в домене `notify`.
 
-## VK setup notes
+## Примечания по настройке VK
 
-- `VK peer ID`: use a user ID for direct messages, or `2000000000 + chat_id` for group chats.
-- `VK wall access token`: required for `/send_post` with image uploads because community tokens cannot upload wall photos.
-- The integration downloads media URLs from Home Assistant, so the URLs must be reachable from your HA instance.
+- `VK peer ID`: используйте ID пользователя для личных сообщений или `2000000000 + chat_id` для групповых чатов.
+- `VK wall access token`: обязателен для `/send_post` с загрузкой изображений, потому что токены сообщества не могут загружать фото на стену.
+- Интеграция скачивает медиа по URL из Home Assistant, поэтому эти URL должны быть доступны из экземпляра HA.
 
-## Troubleshooting
+## Устранение неполадок
 
-- `Failed to download media file`: the media URL is unreachable from Home Assistant.
-- `URL content type ... is not supported`: the remote server returned a non-image or non-video content type.
-- `VK wall access token is required for posts with images`: configure a user token with `wall`, `photos`, and `offline` scopes.
-- `Multiple ha-vk entries are configured; pass entry_id explicitly`: add `entry_id` to the custom service call.
+- `Failed to download media file`: URL медиафайла недоступен из Home Assistant.
+- `URL content type ... is not supported`: удаленный сервер вернул тип содержимого, который не является изображением или видео.
+- `VK wall access token is required for posts with images`: настройте пользовательский токен со scope `wall`, `photos` и `offline`.
+- `Multiple ha-vk entries are configured; pass entry_id explicitly`: добавьте `entry_id` в вызов пользовательского сервиса.

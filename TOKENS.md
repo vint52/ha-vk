@@ -1,154 +1,154 @@
-# Getting VK Tokens and IDs
+# Как получить все токены и ID VK
 
-This guide explains, step by step, how to obtain all VK values required by `ha-vk`:
+В этом файле пошагово описано, как получить все значения VK, которые нужны для настройки `ha-vk`:
 
 - `VK access token`
 - `VK peer ID`
 - `VK group ID`
 - `VK wall access token`
 
-## What each value is used for
+## Для чего нужно каждое значение
 
-- `VK access token`: community token used for messages, image uploads, video uploads, and wall posts without image upload restrictions.
-- `VK peer ID`: destination for messages. This can be a user ID or a chat peer ID.
-- `VK group ID`: numeric community ID used for wall posts.
-- `VK wall access token`: optional user token required for wall posts with images, because VK does not allow wall photo upload with a community token.
+- `VK access token`: основной токен сообщества для отправки сообщений, загрузки изображений, видео и публикации постов.
+- `VK peer ID`: получатель сообщений. Это может быть ID пользователя или `peer_id` беседы.
+- `VK group ID`: числовой ID сообщества, нужен для публикации постов на стену.
+- `VK wall access token`: необязательный пользовательский токен, который нужен для публикации постов с изображением, потому что VK не разрешает загружать фото на стену по токену сообщества.
 
-## 1. Create a VK community
+## 1. Создайте сообщество VK
 
-If you already have a community, skip this step.
+Если сообщество уже создано, этот шаг можно пропустить.
 
-1. Open `https://vk.com/groups?tab=admin`.
-2. Click `Create community`.
-3. Choose the type you need and finish creation.
+1. Откройте `https://vk.com/groups?tab=admin`.
+2. Нажмите `Создать сообщество`.
+3. Выберите нужный тип и завершите создание.
 
-This community will be used by the integration for messaging and wall posts.
+Это сообщество будет использоваться интеграцией для сообщений и публикации постов.
 
-## 2. Enable community messages
+## 2. Включите сообщения сообщества
 
-1. Open your community settings.
-2. Go to the messages section.
-3. Enable community messages.
+1. Откройте настройки сообщества.
+2. Перейдите в раздел сообщений.
+3. Включите сообщения сообщества.
 
-Without this, sending messages through VK API may fail.
+Без этого отправка сообщений через VK API может не работать.
 
-## 3. Get `VK access token`
+## 3. Получите `VK access token`
 
-This is the main token for the integration.
+Это основной токен для интеграции.
 
-1. Open your community settings.
-2. Go to `Work with API` -> `Access keys`.
-3. Click `Create key`.
-4. Grant the permissions you need:
-   - `Community messages` for `messages.send`
-   - `Photos` for image uploads
-   - `Video` for video uploads
-   - `Documents` if you want to upload videos as documents
-   - `Wall` if you want to publish wall posts
-5. Copy the created token.
-6. Paste it into the `VK access token` field during `ha-vk` setup.
+1. Откройте настройки сообщества.
+2. Перейдите в `Работа с API` -> `Ключи доступа`.
+3. Нажмите `Создать ключ`.
+4. Выдайте нужные права:
+   - `Сообщения сообщества` для `messages.send`
+   - `Фотографии` для загрузки изображений
+   - `Видео` для загрузки видео
+   - `Документы`, если хотите загружать видео как документы
+   - `Стена`, если хотите публиковать посты
+5. Скопируйте созданный токен.
+6. Вставьте его в поле `VK access token` при настройке `ha-vk`.
 
-## 4. Get `VK group ID`
+## 4. Получите `VK group ID`
 
-You need the numeric community ID for wall posts.
+Для публикации постов нужен числовой ID сообщества.
 
-### Option 1. From the community URL
+### Вариант 1. Из адреса сообщества
 
-If your community address looks like:
+Если адрес сообщества выглядит так:
 
 - `vk.com/club123456789`
 - `vk.com/public123456789`
 
-then the numeric part is your `VK group ID`.
+то числовая часть и есть ваш `VK group ID`.
 
-### Option 2. From community settings
+### Вариант 2. Из настроек сообщества
 
-If your community uses a short name instead of a numeric URL:
+Если у сообщества короткий адрес вместо числового:
 
-1. Open the community settings.
-2. Look for the numeric ID in the main information section.
+1. Откройте настройки сообщества.
+2. Найдите числовой ID в разделе основной информации.
 
-### Option 3. Via VK API docs tool
+### Вариант 3. Через VK API
 
-You can also inspect the community through `groups.getById`:
+Также можно посмотреть данные сообщества через:
 
 - `https://vk.com/dev/groups.getById`
 
-## 5. Get `VK peer ID`
+## 5. Получите `VK peer ID`
 
-This value depends on where you want messages to go.
+Это значение зависит от того, куда именно вы хотите отправлять сообщения.
 
-### Personal messages
+### Личные сообщения
 
-Use the numeric user ID.
+Используйте числовой ID пользователя.
 
-If the profile URL looks like `vk.com/id123456`, then:
+Если адрес профиля выглядит как `vk.com/id123456`, то:
 
 - `VK peer ID = 123456`
 
-If the profile uses a short name, you can resolve the numeric ID through:
+Если у профиля короткий адрес, числовой ID можно получить через:
 
 - `https://vk.com/dev/users.get`
 
-### Group chats
+### Беседы
 
-For a chat, the value is:
+Для беседы значение рассчитывается так:
 
 - `peer_id = 2000000000 + chat_id`
 
-How to get `chat_id`:
+Как получить `chat_id`:
 
-1. Open the chat in VK Web.
-2. Look at the URL.
-3. If you see something like `im?sel=c123`, then:
+1. Откройте беседу в веб-версии VK.
+2. Посмотрите на адресную строку.
+3. Если там есть что-то вроде `im?sel=c123`, тогда:
    - `chat_id = 123`
    - `VK peer ID = 2000000123`
 
-## 6. Get `VK wall access token`
+## 6. Получите `VK wall access token`
 
-This token is optional, but it is required if you want to publish a wall post with an image.
+Этот токен необязателен, но он нужен, если вы хотите публиковать пост на стену с изображением.
 
-VK allows posting on behalf of the community with a community token, but image upload for wall posts requires a user token with the right scopes.
+VK позволяет публиковать от имени сообщества по токену сообщества, но загрузка фото для стены требует пользовательский токен с нужными правами.
 
-### Step-by-step
+### Пошагово
 
-1. Create a VK application of type `Standalone`:
+1. Создайте приложение VK типа `Standalone`:
    - `https://vk.com/editapp?act=create`
-2. Save the application and copy its `client_id`.
-3. Open this URL in your browser, replacing `CLIENT_ID` with your real value:
+2. Сохраните приложение и скопируйте его `client_id`.
+3. Откройте в браузере ссылку ниже, заменив `CLIENT_ID` на свое значение:
 
 ```text
 https://oauth.vk.com/authorize?client_id=CLIENT_ID&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=wall,photos,offline&response_type=token&v=5.131
 ```
 
-4. Sign in to VK if needed and allow access.
-5. After redirect, inspect the browser address bar.
-6. Find `access_token=...` in the URL fragment.
-7. Copy that token and use it as `VK wall access token`.
+4. При необходимости авторизуйтесь в VK и разрешите доступ.
+5. После редиректа посмотрите на адресную строку браузера.
+6. Найдите в URL фрагмент `access_token=...`.
+7. Скопируйте этот токен и используйте его как `VK wall access token`.
 
-You can also use:
+Также можно воспользоваться:
 
 - `https://vkhost.github.io/`
 
-When requesting the token, make sure these scopes are included:
+При получении токена обязательно должны быть указаны scope:
 
 - `wall`
 - `photos`
 - `offline`
 
-The VK user who grants access must be an admin of the target community.
+Пользователь VK, который выдает доступ, должен быть администратором нужного сообщества.
 
-## 7. Which fields are mandatory
+## 7. Какие поля обязательны
 
-- `VK access token`: required
-- `VK peer ID`: required
-- `VK group ID`: required for wall posts
-- `VK wall access token`: required only for wall posts with image
+- `VK access token`: обязательно
+- `VK peer ID`: обязательно
+- `VK group ID`: обязательно для постов на стену
+- `VK wall access token`: обязателен только для постов с изображением
 
-If you only send messages, images, or videos to chats and users, you can usually leave `VK wall access token` empty.
+Если вы отправляете только сообщения, изображения или видео в личные сообщения и беседы, `VK wall access token` обычно можно не заполнять.
 
-## Common issues
+## Частые проблемы
 
-- `Group authorization failed: method is unavailable with group auth`: use `VK wall access token` for wall posts with images.
-- Messages are not sent to the target chat: verify that `VK peer ID` is correct.
-- Wall posts fail: verify that `VK group ID` is numeric and matches the target community.
+- `Group authorization failed: method is unavailable with group auth`: для постов с изображением нужен `VK wall access token`.
+- Сообщения уходят не туда: проверьте правильность `VK peer ID`.
+- Публикация поста не работает: проверьте, что `VK group ID` числовой и соответствует нужному сообществу.

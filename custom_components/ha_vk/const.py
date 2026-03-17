@@ -21,9 +21,7 @@ DEFAULT_NAME = "ha-vk"
 DEFAULT_API_VERSION = "5.131"
 DEFAULT_REQUEST_TIMEOUT = 30.0
 
-SERVICE_SEND_IMAGE = "send_image"
 SERVICE_SEND_MESSAGE = "send_message"
-SERVICE_SEND_VIDEO = "send_video"
 SERVICE_SEND_POST = "send_post"
 
 ATTR_IMAGE = "image"
