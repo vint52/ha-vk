@@ -30,6 +30,8 @@
         "title": "ha-vk options",
         "data": {
           "name": "Notify entity name",
+          "vk_access_token": "VK access token",
+          "vk_peer_id": "VK peer ID",
           "vk_group_id": "VK group ID",
           "enable_incoming_messages": "Enable incoming VK messages",
           "vk_wall_access_token": "VK wall access token",
@@ -39,6 +41,7 @@
       }
     },
     "error": {
+      "already_configured": "A ha-vk entry with the same peer and group is already configured",
       "cannot_connect": "Failed to connect to VK",
       "incoming_not_available": "Incoming VK messages are unavailable for this community configuration",
       "invalid_auth": "Authentication failed",

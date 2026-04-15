@@ -60,7 +60,7 @@ async def test_user_flow_creates_entry(hass: HomeAssistant) -> None:
 
 
 async def test_options_flow_updates_options(hass: HomeAssistant) -> None:
-    """Options flow should persist editable values."""
+    """Options flow should persist editable values and rekey the entry."""
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -90,6 +90,8 @@ async def test_options_flow_updates_options(hass: HomeAssistant) -> None:
             result["flow_id"],
             user_input={
                 CONF_NAME: "vk_family",
+                CONF_VK_ACCESS_TOKEN: "new-token",
+                CONF_PEER_ID: "2000000999",
                 CONF_GROUP_ID: "77",
                 CONF_ENABLE_INCOMING_MESSAGES: True,
                 CONF_VK_WALL_ACCESS_TOKEN: "new",
@@ -104,6 +106,69 @@ async def test_options_flow_updates_options(hass: HomeAssistant) -> None:
     assert result["data"][CONF_VK_WALL_ACCESS_TOKEN] == "new"
     assert entry.title == "vk_family"
     assert entry.data[CONF_NAME] == "vk_family"
+    assert entry.data[CONF_VK_ACCESS_TOKEN] == "new-token"
+    assert entry.data[CONF_PEER_ID] == "2000000999"
+    assert entry.unique_id == "peer:2000000999|group:77"
+
+
+async def test_options_flow_rejects_duplicate_peer_and_group(hass: HomeAssistant) -> None:
+    """Options flow should block unique ID collisions."""
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="vk_alerts",
+        unique_id="peer:2000000123|group:42",
+        data={
+            CONF_NAME: "vk_alerts",
+            CONF_VK_ACCESS_TOKEN: "token",
+            CONF_PEER_ID: "2000000123",
+            CONF_GROUP_ID: "42",
+        },
+        options={
+            CONF_ENABLE_INCOMING_MESSAGES: False,
+            CONF_VK_WALL_ACCESS_TOKEN: "old",
+            CONF_API_VERSION: DEFAULT_API_VERSION,
+            CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
+        },
+    )
+    other_entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="vk_other",
+        unique_id="peer:2000000555|group:77",
+        data={
+            CONF_NAME: "vk_other",
+            CONF_VK_ACCESS_TOKEN: "other-token",
+            CONF_PEER_ID: "2000000555",
+            CONF_GROUP_ID: "77",
+        },
+        options={
+            CONF_ENABLE_INCOMING_MESSAGES: False,
+            CONF_VK_WALL_ACCESS_TOKEN: "",
+            CONF_API_VERSION: DEFAULT_API_VERSION,
+            CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
+        },
+    )
+    entry.add_to_hass(hass)
+    other_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            CONF_NAME: "vk_family",
+            CONF_VK_ACCESS_TOKEN: "new-token",
+            CONF_PEER_ID: "2000000555",
+            CONF_GROUP_ID: "77",
+            CONF_ENABLE_INCOMING_MESSAGES: True,
+            CONF_VK_WALL_ACCESS_TOKEN: "new",
+            CONF_API_VERSION: "5.199",
+            CONF_REQUEST_TIMEOUT: 60,
+        },
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"]["base"] == "already_configured"
+    assert entry.unique_id == "peer:2000000123|group:42"
 
 
 async def test_user_flow_surfaces_incoming_message_setup_errors(hass: HomeAssistant) -> None:
