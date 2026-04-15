@@ -46,7 +46,7 @@ The setup flow asks for:
 - `VK access token`: community token used for messages and uploads
 - `VK peer ID`: user ID or chat peer ID
 - `VK group ID`: required for wall posts
-- `VK wall access token`: optional user token needed for wall posts with images
+- `VK wall access token`: optional user token for photos/videos on the community wall and for uploading videos on behalf of a user
 - `VK API version`: defaults to `5.131`
 - `Request timeout`: defaults to `30`
 
@@ -139,12 +139,13 @@ Each config entry also gets its own notify entity under the `notify` domain.
 ## VK setup notes
 
 - `VK peer ID`: use a user ID for direct messages, or `2000000000 + chat_id` for group chats.
-- `VK wall access token`: required for `/send_post` with image uploads because community tokens cannot upload wall photos.
+- `VK wall access token`: needed for photos/videos on the community wall and for uploading videos on behalf of a user. Without it, videos in messages can still be sent as documents, but photos and videos cannot be posted on the community wall.
 - The integration downloads media URLs from Home Assistant, so the URLs must be reachable from your HA instance.
 
 ## Troubleshooting
 
 - `Failed to download media file`: the media URL is unreachable from Home Assistant.
 - `URL content type ... is not supported`: the remote server returned a non-image or non-video content type.
-- `VK wall access token is required for posts with images`: configure a user token with `wall`, `photos`, and `offline` scopes.
+- If `ha_vk.send_post` publishes text without the image: configure a user token with `wall`, `photos`, `video`, and `offline` scopes in `VK wall access token`.
+- `VK wall access token is invalid`: generate a new user token. If you get it through `https://vkhost.github.io/` and see `{"error":"invalid_request","error_description":"application is blocked"}`, try another app from the service list, for example `VK Admin`, `VK Admin (iOS)`, `vk.com`, or `Kate Mobile`.
 - `Multiple ha-vk entries are configured; pass entry_id explicitly`: add `entry_id` to the custom service call.
