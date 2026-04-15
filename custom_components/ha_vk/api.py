@@ -247,7 +247,10 @@ class VkClient:
         if send_type == SEND_TYPE_DOCUMENT:
             return await self._save_video_document_attachment(content, content_type, filename)
 
-        upload_token = self._config.wall_access_token or self._config.access_token
+        if not self._config.wall_access_token:
+            return await self._save_video_document_attachment(content, content_type, filename)
+
+        upload_token = self._config.wall_access_token
         try:
             attachment = await self._save_video_attachment(
                 upload_token,
@@ -256,9 +259,11 @@ class VkClient:
                 filename,
             )
         except VkApiError as err:
-            if self._config.wall_access_token or "group authorization failed" not in str(err).lower():
-                raise
-            return await self._save_video_document_attachment(content, content_type, filename)
+            if _is_invalid_token_error(str(err)):
+                raise VkApiError("VK wall access token is invalid") from err
+            if "group authorization failed" in str(err).lower():
+                return await self._save_video_document_attachment(content, content_type, filename)
+            raise
 
         return attachment
 
@@ -269,14 +274,8 @@ class VkClient:
             raise VkConfigError("VK group ID is required for wall posts")
 
         attachments = None
-        token = self._config.access_token
-        if image_url:
-            if not self._config.wall_access_token:
-                raise VkApiError(
-                    "VK wall access token is required for posts with images. "
-                    "Use a user token with wall/photos/offline permissions."
-                )
-            token = self._config.wall_access_token
+        token = self._config.wall_access_token or self._config.access_token
+        if image_url and self._config.wall_access_token:
             attachments = await self._upload_wall_photo(image_url, token)
 
         response = await self._api_call(
@@ -549,6 +548,13 @@ def _extract_doc_info(save_response: Any) -> dict[str, Any]:
     if isinstance(save_response, list):
         return _first_item(save_response, "document")
     raise VkApiError("Invalid document data from VK API")
+
+
+def _is_invalid_token_error(message: str) -> bool:
+    """Return True when VK reports an invalid or denied token."""
+
+    lower = message.lower()
+    return "invalid access token" in lower or "access denied" in lower
 
 
 def _first_item(value: Any, label: str) -> dict[str, Any]:

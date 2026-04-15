@@ -107,30 +107,63 @@ async def test_send_message_rejects_multiple_media_types() -> None:
 
 
 @pytest.mark.asyncio
-async def test_send_video_falls_back_to_document_upload() -> None:
-    """Group-token video failures should fall back to document uploads."""
+async def test_send_video_without_wall_token_uses_document_upload() -> None:
+    """Without a wall token, videos should be sent as documents immediately."""
 
     client = VkClient(Mock(), VkClientConfig(access_token="token", peer_id=1))
     client._download_file = AsyncMock(return_value=(b"video", "video/mp4", "clip.mp4"))  # type: ignore[method-assign]
-    client._save_video_attachment = AsyncMock(side_effect=VkApiError("Group authorization failed"))  # type: ignore[method-assign]
+    client._save_video_attachment = AsyncMock()  # type: ignore[method-assign]
     client._save_video_document_attachment = AsyncMock(return_value="doc1_2")  # type: ignore[method-assign]
     client._send_attachment = AsyncMock(return_value={"response": 1})  # type: ignore[method-assign]
 
     result = await client.async_send_video("http://example.com/clip.mp4", "video")
 
     assert result == {"response": 1}
+    client._save_video_attachment.assert_not_awaited()
     client._save_video_document_attachment.assert_awaited_once()
     client._send_attachment.assert_awaited_once_with("doc1_2")
 
 
 @pytest.mark.asyncio
-async def test_send_post_with_image_requires_wall_token() -> None:
-    """Wall image uploads should require a dedicated user token."""
+async def test_send_video_with_invalid_wall_token_raises_clear_error() -> None:
+    """Invalid wall tokens should surface a clear upload error."""
+
+    client = VkClient(
+        Mock(),
+        VkClientConfig(access_token="token", wall_access_token="wall", peer_id=1),
+    )
+    client._download_file = AsyncMock(return_value=(b"video", "video/mp4", "clip.mp4"))  # type: ignore[method-assign]
+    client._save_video_attachment = AsyncMock(  # type: ignore[method-assign]
+        side_effect=VkApiError("video.save: invalid access token")
+    )
+    client._save_video_document_attachment = AsyncMock()  # type: ignore[method-assign]
+
+    with pytest.raises(VkApiError, match="VK wall access token is invalid"):
+        await client.async_send_video("http://example.com/clip.mp4", "video")
+
+    client._save_video_document_attachment.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_post_with_image_without_wall_token_skips_attachment() -> None:
+    """Wall posts should stay text-only when no wall token is configured."""
 
     client = VkClient(
         Mock(),
         VkClientConfig(access_token="token", peer_id=1, group_id=42),
     )
+    client._upload_wall_photo = AsyncMock(return_value="photo1_2")  # type: ignore[method-assign]
+    client._api_call = AsyncMock(return_value=123)  # type: ignore[method-assign]
 
-    with pytest.raises(VkApiError, match="wall access token is required"):
-        await client.async_send_post("hello", "http://example.com/image.jpg")
+    result = await client.async_send_post("hello", "http://example.com/image.jpg")
+
+    assert result == {"response": 123}
+    client._upload_wall_photo.assert_not_awaited()
+    client._api_call.assert_awaited_once_with(
+        "wall.post",
+        token="token",
+        owner_id=-42,
+        from_group=1,
+        message="hello",
+        attachments=None,
+    )

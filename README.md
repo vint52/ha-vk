@@ -46,7 +46,7 @@ _или_
 - `VK access token`: токен сообщества для сообщений и загрузки файлов
 - `VK peer ID`: ID пользователя или peer ID чата
 - `VK group ID`: требуется для публикации постов на стену
-- `VK wall access token`: необязательный пользовательский токен, необходимый для постов на стену с изображениями
+- `VK wall access token`: необязательный пользовательский токен для фото/видео на стене сообщества и загрузки видео от имени пользователя
 - `VK API version`: по умолчанию `5.131`
 - `Request timeout`: по умолчанию `30`
 
@@ -139,12 +139,13 @@ data:
 ## Примечания по настройке VK
 
 - `VK peer ID`: используйте ID пользователя для личных сообщений или `2000000000 + chat_id` для групповых чатов.
-- `VK wall access token`: обязателен для `/send_post` с загрузкой изображений, потому что токены сообщества не могут загружать фото на стену.
+- `VK wall access token`: нужен для фото/видео на стене сообщества и для загрузки видео от имени пользователя. Без него видео в сообщениях можно отправлять как документ, но фото и видео на стену сообщества отправлять нельзя.
 - Интеграция скачивает медиа по URL из Home Assistant, поэтому эти URL должны быть доступны из экземпляра HA.
 
 ## Устранение неполадок
 
 - `Failed to download media file`: URL медиафайла недоступен из Home Assistant.
 - `URL content type ... is not supported`: удаленный сервер вернул тип содержимого, который не является изображением или видео.
-- `VK wall access token is required for posts with images`: настройте пользовательский токен со scope `wall`, `photos` и `offline`.
+- Если `ha_vk.send_post` публикует только текст без изображения: настройте пользовательский токен со scope `wall`, `photos`, `video` и `offline` в `VK wall access token`.
+- `VK wall access token is invalid`: получите новый пользовательский токен. Если берете его через `https://vkhost.github.io/` и видите `{"error":"invalid_request","error_description":"application is blocked"}`, попробуйте другое приложение из списка сервиса, например `VK Admin`, `VK Admin (iOS)`, `vk.com` или `Kate Mobile`.
 - `Multiple ha-vk entries are configured; pass entry_id explicitly`: добавьте `entry_id` в вызов пользовательского сервиса.

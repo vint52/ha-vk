@@ -12,7 +12,7 @@ This guide explains, step by step, how to obtain all VK values required by `ha-v
 - `VK access token`: community token used for messages, image uploads, video uploads, and wall posts without image upload restrictions.
 - `VK peer ID`: destination for messages. This can be a user ID or a chat peer ID.
 - `VK group ID`: numeric community ID used for wall posts.
-- `VK wall access token`: optional user token required for wall posts with images, because VK does not allow wall photo upload with a community token.
+- `VK wall access token`: optional user token required for photos/videos on the community wall and for uploading videos on behalf of a user. Without it, videos in messages can still be sent as documents, but photos and videos cannot be posted on the community wall.
 
 ## 1. Create a VK community
 
@@ -106,9 +106,9 @@ How to get `chat_id`:
 
 ## 6. Get `VK wall access token`
 
-This token is optional, but it is required if you want to publish a wall post with an image.
+This token is optional, but it is required for photos and videos on the community wall, and for uploading videos on behalf of a user.
 
-VK allows posting on behalf of the community with a community token, but image upload for wall posts requires a user token with the right scopes.
+VK allows posting on behalf of the community with a community token, but wall photos and videos, as well as VK videos that must be uploaded as a user, require a user token with the proper scopes.
 
 ### Step-by-step
 
@@ -118,7 +118,7 @@ VK allows posting on behalf of the community with a community token, but image u
 3. Open this URL in your browser, replacing `CLIENT_ID` with your real value:
 
 ```text
-https://oauth.vk.com/authorize?client_id=CLIENT_ID&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=wall,photos,offline&response_type=token&v=5.131
+https://oauth.vk.com/authorize?client_id=CLIENT_ID&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=wall,photos,video,offline&response_type=token&v=5.131
 ```
 
 4. Sign in to VK if needed and allow access.
@@ -130,10 +130,13 @@ You can also use:
 
 - `https://vkhost.github.io/`
 
+If `vkhost` shows an error like `{"error":"invalid_request","error_description":"application is blocked"}`, the app currently selected on the page is not issuing the required user token. Go back and try another app from the `vkhost` list, for example `VK Admin`, `VK Admin (iOS)`, `vk.com`, or `Kate Mobile`. The list of available apps on the service may change over time.
+
 When requesting the token, make sure these scopes are included:
 
 - `wall`
 - `photos`
+- `video`
 - `offline`
 
 The VK user who grants access must be an admin of the target community.
@@ -143,12 +146,13 @@ The VK user who grants access must be an admin of the target community.
 - `VK access token`: required
 - `VK peer ID`: required
 - `VK group ID`: required for wall posts
-- `VK wall access token`: required only for wall posts with image
+- `VK wall access token`: required for photos/videos on the community wall and for uploading videos as VK videos
 
-If you only send messages, images, or videos to chats and users, you can usually leave `VK wall access token` empty.
+If you only send messages, images, or videos to chats and users, you can usually leave `VK wall access token` empty. Without it, videos will fall back to document uploads when direct VK video upload is unavailable.
 
 ## Common issues
 
-- `Group authorization failed: method is unavailable with group auth`: use `VK wall access token` for wall posts with images.
+- `Group authorization failed: method is unavailable with group auth`: use `VK wall access token` for photos/videos on the community wall and for uploading videos as VK videos.
+- `VK wall access token is invalid`: generate a new user token. If you use `https://vkhost.github.io/` and see `{"error":"invalid_request","error_description":"application is blocked"}`, try another app from the `vkhost` list.
 - Messages are not sent to the target chat: verify that `VK peer ID` is correct.
 - Wall posts fail: verify that `VK group ID` is numeric and matches the target community.
