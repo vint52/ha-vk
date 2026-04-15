@@ -109,6 +109,20 @@ data:
   image: "http://frigate.local/api/events/123/snapshot.jpg?bbox=1&crop=0"
 ```
 
+## Usage examples
+
+### Photo and video in group messages
+
+Example of photo and video delivery to VK group messages:
+
+![Example of photo and video in group messages](docs/messages-and-video-example.png)
+
+### Info and photo on the community wall
+
+Example of a wall post with a photo and status information:
+
+![Example of a wall post on the community wall](docs/wall-post-example.png)
+
 ## Multiple VK accounts or chats
 
 If you configure multiple ha-vk entries, service calls under `ha_vk.*` must include `entry_id`:
