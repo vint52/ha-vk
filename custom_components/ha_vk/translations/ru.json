@@ -30,6 +30,8 @@
         "title": "Параметры ha-vk",
         "data": {
           "name": "Имя notify-сущности",
+          "vk_access_token": "Токен доступа ВК",
+          "vk_peer_id": "VK peer ID",
           "vk_group_id": "VK group ID",
           "enable_incoming_messages": "Включить входящие сообщения VK",
           "vk_wall_access_token": "Токен для постов на стене",
@@ -39,6 +41,7 @@
       }
     },
     "error": {
+      "already_configured": "Запись ha-vk с таким peer и group уже настроена",
       "cannot_connect": "Не удалось подключиться к VK",
       "incoming_not_available": "Входящие сообщения VK недоступны для этой конфигурации сообщества",
       "invalid_auth": "Ошибка авторизации",

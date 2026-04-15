@@ -1,6 +1,6 @@
 [project]
 name = "ha-vk"
-version = "1.0.0"
+version = "1.0.1"
 description = "Home Assistant custom integration for VK notifications"
 requires-python = ">=3.12"
 

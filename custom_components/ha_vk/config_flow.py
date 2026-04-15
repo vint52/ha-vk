@@ -92,6 +92,12 @@ def _build_options_schema(user_input: dict[str, Any] | None = None) -> vol.Schem
             vol.Required(CONF_NAME, default=values.get(CONF_NAME, DEFAULT_NAME)): selector.TextSelector(
                 selector.TextSelectorConfig(),
             ),
+            vol.Required(CONF_VK_ACCESS_TOKEN, default=values.get(CONF_VK_ACCESS_TOKEN, "")): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
+            ),
+            vol.Required(CONF_PEER_ID, default=values.get(CONF_PEER_ID, "")): selector.TextSelector(
+                selector.TextSelectorConfig(),
+            ),
             vol.Optional(
                 CONF_GROUP_ID,
                 default=values.get(CONF_GROUP_ID, ""),
@@ -129,6 +135,19 @@ def _entry_unique_id(user_input: dict[str, Any]) -> str:
 
     group_id = str(user_input.get(CONF_GROUP_ID, "")).strip() or "none"
     return f"peer:{str(user_input[CONF_PEER_ID]).strip()}|group:{group_id}"
+
+
+def _is_unique_id_available(
+    hass: HomeAssistant,
+    unique_id: str,
+    current_entry_id: str | None = None,
+) -> bool:
+    """Return whether the given unique ID is unused by other ha_vk entries."""
+
+    return not any(
+        entry.unique_id == unique_id and entry.entry_id != current_entry_id
+        for entry in hass.config_entries.async_entries(DOMAIN)
+    )
 
 
 def _entry_data(user_input: dict[str, Any]) -> dict[str, Any]:
@@ -221,32 +240,41 @@ class HaVkOptionsFlow(config_entries.OptionsFlow):
         current = {**self.config_entry.data, **self.config_entry.options}
 
         if user_input is not None:
-            merged = {**self.config_entry.data, **user_input}
-            try:
-                await _async_validate_input(self.hass, merged)
-            except VkConfigError as err:
-                if "incoming messages" in str(err).lower():
-                    errors["base"] = "incoming_not_available"
-                else:
-                    errors["base"] = "invalid_input"
-            except VkApiError as err:
-                lower = str(err).lower()
-                if "groups.getlongpollserver" in lower or "vk long poll" in lower:
-                    errors["base"] = "incoming_not_available"
-                elif "invalid access token" in lower or "access denied" in lower:
-                    errors["base"] = "invalid_auth"
-                elif "network error" in lower:
-                    errors["base"] = "cannot_connect"
-                else:
-                    errors["base"] = "vk_error"
+            merged = {**self.config_entry.data, **self.config_entry.options, **user_input}
+            new_unique_id = _entry_unique_id(merged)
+            if not _is_unique_id_available(
+                self.hass,
+                new_unique_id,
+                current_entry_id=self.config_entry.entry_id,
+            ):
+                errors["base"] = "already_configured"
             else:
-                new_name = str(user_input[CONF_NAME]).strip() or DEFAULT_NAME
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    title=new_name,
-                    data={**self.config_entry.data, CONF_NAME: new_name},
-                )
-                return self.async_create_entry(title="", data=_entry_options(user_input))
+                try:
+                    await _async_validate_input(self.hass, merged)
+                except VkConfigError as err:
+                    if "incoming messages" in str(err).lower():
+                        errors["base"] = "incoming_not_available"
+                    else:
+                        errors["base"] = "invalid_input"
+                except VkApiError as err:
+                    lower = str(err).lower()
+                    if "groups.getlongpollserver" in lower or "vk long poll" in lower:
+                        errors["base"] = "incoming_not_available"
+                    elif "invalid access token" in lower or "access denied" in lower:
+                        errors["base"] = "invalid_auth"
+                    elif "network error" in lower:
+                        errors["base"] = "cannot_connect"
+                    else:
+                        errors["base"] = "vk_error"
+                else:
+                    new_name = str(merged[CONF_NAME]).strip() or DEFAULT_NAME
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry,
+                        title=new_name,
+                        unique_id=new_unique_id,
+                        data=_entry_data(merged),
+                    )
+                    return self.async_create_entry(title="", data=_entry_options(merged))
 
             current = {**current, **user_input}
 
