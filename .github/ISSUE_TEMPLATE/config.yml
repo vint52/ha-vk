@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage and setup guide
+    url: https://github.com/vint52/ha-vk/blob/main/README.en.md
+    about: Check installation, configuration, and usage examples first.
+  - name: VK token guide
+    url: https://github.com/vint52/ha-vk/blob/main/TOKENS.en.md
+    about: Read the token and ID setup guide before reporting auth issues.

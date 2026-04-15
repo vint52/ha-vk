@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an improvement for ha-vk
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement.
+        Please describe the use case first, then the proposed behavior.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: VK or Home Assistant constraints
+      description: Mention API limits, auth requirements, or compatibility needs.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context

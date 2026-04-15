@@ -5,6 +5,8 @@
 [![Home Assistant Custom Integration](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=homeassistant&logoColor=white)](https://github.com/vint52/ha-vk)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5)](https://github.com/vint52/ha-vk?tab=readme-ov-file#installation)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)](https://github.com/vint52/ha-vk/blob/main/pyproject.toml)
+[![Validate](https://github.com/vint52/ha-vk/actions/workflows/validate.yml/badge.svg)](https://github.com/vint52/ha-vk/actions/workflows/validate.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ![ha-vk logo](custom_components/ha_vk/brand/logo.png)
 
@@ -149,3 +151,11 @@ Each config entry also gets its own notify entity under the `notify` domain.
 - If `ha_vk.send_post` publishes text without the image: configure a user token with `wall`, `photos`, `video`, and `offline` scopes in `VK wall access token`.
 - `VK wall access token is invalid`: generate a new user token. If you get it through `https://vkhost.github.io/` and see `{"error":"invalid_request","error_description":"application is blocked"}`, try another app from the service list, for example `VK Admin`, `VK Admin (iOS)`, `vk.com`, or `Kate Mobile`.
 - `Multiple ha-vk entries are configured; pass entry_id explicitly`: add `entry_id` to the custom service call.
+
+## Open Source
+
+- License: [`LICENSE`](LICENSE)
+- Contributing guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Code of Conduct: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+- Security policy: [`SECURITY.md`](SECURITY.md)
+- Support guide: [`SUPPORT.md`](SUPPORT.md)

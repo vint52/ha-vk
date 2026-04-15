@@ -5,6 +5,8 @@
 [![Home Assistant Custom Integration](https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-41BDF5?logo=homeassistant&logoColor=white)](https://github.com/vint52/ha-vk)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5)](https://github.com/vint52/ha-vk?tab=readme-ov-file#%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)](https://github.com/vint52/ha-vk/blob/main/pyproject.toml)
+[![Validate](https://github.com/vint52/ha-vk/actions/workflows/validate.yml/badge.svg)](https://github.com/vint52/ha-vk/actions/workflows/validate.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ![Логотип ha-vk](custom_components/ha_vk/brand/logo.png)
 
@@ -149,3 +151,11 @@ data:
 - Если `ha_vk.send_post` публикует только текст без изображения: настройте пользовательский токен со scope `wall`, `photos`, `video` и `offline` в `VK wall access token`.
 - `VK wall access token is invalid`: получите новый пользовательский токен. Если берете его через `https://vkhost.github.io/` и видите `{"error":"invalid_request","error_description":"application is blocked"}`, попробуйте другое приложение из списка сервиса, например `VK Admin`, `VK Admin (iOS)`, `vk.com` или `Kate Mobile`.
 - `Multiple ha-vk entries are configured; pass entry_id explicitly`: добавьте `entry_id` в вызов пользовательского сервиса.
+
+## Open Source
+
+- Лицензия: [`LICENSE`](LICENSE)
+- Вклад в проект: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Кодекс сообщества: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+- Безопасность: [`SECURITY.md`](SECURITY.md)
+- Поддержка: [`SUPPORT.md`](SUPPORT.md)
