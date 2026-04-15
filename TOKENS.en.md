@@ -11,7 +11,7 @@ This guide explains, step by step, how to obtain all VK values required by `ha-v
 
 - `VK access token`: community token used for messages, image uploads, video uploads, and wall posts without image upload restrictions.
 - `VK peer ID`: destination for messages. This can be a user ID or a chat peer ID.
-- `VK group ID`: numeric community ID used for wall posts.
+- `VK group ID`: numeric community ID used for wall posts and incoming community messages.
 - `VK wall access token`: optional user token required for photos/videos on the community wall and for uploading videos on behalf of a user. Without it, videos in messages can still be sent as documents, but photos and videos cannot be posted on the community wall.
 
 ## 1. Create a VK community
@@ -29,8 +29,9 @@ This community will be used by the integration for messaging and wall posts.
 1. Open your community settings.
 2. Go to the messages section.
 3. Enable community messages.
+4. In `Work with API` -> `Long Poll API`, enable the long poll server for the community.
 
-Without this, sending messages through VK API may fail.
+Without this, sending messages through VK API may fail, and incoming messages will not be delivered to Home Assistant.
 
 ## 3. Get `VK access token`
 
@@ -50,7 +51,7 @@ This is the main token for the integration.
 
 ## 4. Get `VK group ID`
 
-You need the numeric community ID for wall posts.
+You need the numeric community ID for wall posts and incoming community messages.
 
 ### Option 1. From the community URL
 
@@ -145,7 +146,7 @@ The VK user who grants access must be an admin of the target community.
 
 - `VK access token`: required
 - `VK peer ID`: required
-- `VK group ID`: required for wall posts
+- `VK group ID`: required for wall posts and incoming community messages
 - `VK wall access token`: required for photos/videos on the community wall and for uploading videos as VK videos
 
 If you only send messages, images, or videos to chats and users, you can usually leave `VK wall access token` empty. Without it, videos will fall back to document uploads when direct VK video upload is unavailable.
@@ -153,6 +154,8 @@ If you only send messages, images, or videos to chats and users, you can usually
 ## Common issues
 
 - `Group authorization failed: method is unavailable with group auth`: use `VK wall access token` for photos/videos on the community wall and for uploading videos as VK videos.
+- `Incoming VK messages are unavailable for this community configuration`: verify that community messages and the Long Poll API are enabled for the VK group, and that the community token has permission to access them.
 - `VK wall access token is invalid`: generate a new user token. If you use `https://vkhost.github.io/` and see `{"error":"invalid_request","error_description":"application is blocked"}`, try another app from the `vkhost` list.
 - Messages are not sent to the target chat: verify that `VK peer ID` is correct.
+- Incoming events are not fired in Home Assistant: verify that the configured `VK peer ID` exactly matches the chat or user from which the community receives messages.
 - Wall posts fail: verify that `VK group ID` is numeric and matches the target community.

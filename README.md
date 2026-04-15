@@ -21,6 +21,7 @@ VK-клиент для Home Assistant.
 - текстовые сообщения через `notify`
 - текстовые сообщения с необязательным изображением или видео через `ha_vk.send_message`
 - посты на стену через `ha_vk.send_post`
+- входящие сообщения сообщества как события Home Assistant через `ha_vk_incoming_message`
 
 ## Установка
 
@@ -47,12 +48,14 @@ _или_
 - `Notify entity name`: используется как имя notify-сущности в Home Assistant
 - `VK access token`: токен сообщества для сообщений и загрузки файлов
 - `VK peer ID`: ID пользователя или peer ID чата
-- `VK group ID`: требуется для публикации постов на стену
+- `VK group ID`: требуется для публикации постов на стену и входящих сообщений сообщества
+- `Enable incoming VK messages`: включает VK long poll и события Home Assistant для новых сообщений из настроенного peer
 - `VK wall access token`: необязательный пользовательский токен для фото/видео на стене сообщества и загрузки видео от имени пользователя
 - `VK API version`: по умолчанию `5.131`
 - `Request timeout`: по умолчанию `30`
 
 Подробная инструкция по получению всех нужных VK-токенов и ID находится в [`TOKENS.md`](TOKENS.md).
+Готовые сценарии автоматизаций и варианты использования собраны в [`docs/examples.md`](docs/examples.md).
 
 После завершения настройки Home Assistant создаст notify-сущность с именем на основе выбранного названия.
 Пример: если указать `ha-vk`, будет создана notify-сущность вроде `notify.ha_vk`.
@@ -102,6 +105,45 @@ data:
 
 Используйте `type: document`, если нужно принудительно загружать файл как документ, а не как VK-видео. В одном вызове `ha_vk.send_message` можно передавать только одно из полей `image` или `video`.
 
+### Входящие сообщения
+
+Если включен `Enable incoming VK messages`, настроен `VK group ID`, а токен сообщества имеет доступ к сообщениям сообщества, `ha-vk` запускает VK long poll и создает событие Home Assistant для каждого нового входящего сообщения из настроенного `VK peer ID`.
+
+Тип события:
+
+```text
+ha_vk_incoming_message
+```
+
+В payload события входят:
+
+- `entry_id`
+- `group_id`
+- `peer_id`
+- `from_id`
+- `conversation_message_id`
+- `message_id`
+- `event_id`
+- `date`
+- `text`
+- `attachments`
+- `raw_event`
+
+Пример automation:
+
+```yaml
+automation:
+  - alias: Реакция на входящее сообщение VK
+    trigger:
+      - platform: event
+        event_type: ha_vk_incoming_message
+    action:
+      - action: logbook.log
+        data:
+          name: VK
+          message: "{{ trigger.event.data.text }}"
+```
+
 ### Пост на стену
 
 ```yaml
@@ -141,6 +183,8 @@ data:
 ## Примечания по настройке VK
 
 - `VK peer ID`: используйте ID пользователя для личных сообщений или `2000000000 + chat_id` для групповых чатов.
+- Входящие сообщения создаются только для настроенного `VK peer ID`.
+- `VK group ID`: обязателен для входящих сообщений сообщества, потому что VK group long poll привязан к ID сообщества.
 - `VK wall access token`: нужен для фото/видео на стене сообщества и для загрузки видео от имени пользователя. Без него видео в сообщениях можно отправлять как документ, но фото и видео на стену сообщества отправлять нельзя.
 - Интеграция скачивает медиа по URL из Home Assistant, поэтому эти URL должны быть доступны из экземпляра HA.
 
@@ -149,6 +193,7 @@ data:
 - `Failed to download media file`: URL медиафайла недоступен из Home Assistant.
 - `URL content type ... is not supported`: удаленный сервер вернул тип содержимого, который не является изображением или видео.
 - Если `ha_vk.send_post` публикует только текст без изображения: настройте пользовательский токен со scope `wall`, `photos`, `video` и `offline` в `VK wall access token`.
+- `Входящие сообщения VK недоступны для этой конфигурации сообщества`: проверьте, что в VK включены сообщения сообщества и токен сообщества имеет доступ к long poll для выбранной группы.
 - `VK wall access token is invalid`: получите новый пользовательский токен. Если берете его через `https://vkhost.github.io/` и видите `{"error":"invalid_request","error_description":"application is blocked"}`, попробуйте другое приложение из списка сервиса, например `VK Admin`, `VK Admin (iOS)`, `vk.com` или `Kate Mobile`.
 - `Multiple ha-vk entries are configured; pass entry_id explicitly`: добавьте `entry_id` в вызов пользовательского сервиса.
 

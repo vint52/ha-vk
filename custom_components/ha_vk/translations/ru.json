@@ -9,6 +9,7 @@
           "vk_access_token": "Токен доступа ВК",
           "vk_peer_id": "VK peer ID",
           "vk_group_id": "VK group ID",
+          "enable_incoming_messages": "Включить входящие сообщения VK",
           "vk_wall_access_token": "Токен для постов на стене",
           "vk_api_version": "Версия VK API",
           "request_timeout": "Таймаут запроса"
@@ -17,6 +18,7 @@
     },
     "error": {
       "cannot_connect": "Не удалось подключиться к VK",
+      "incoming_not_available": "Входящие сообщения VK недоступны для этой конфигурации сообщества",
       "invalid_auth": "Ошибка авторизации",
       "invalid_input": "Некорректное значение конфигурации",
       "vk_error": "VK отклонил конфигурацию"
@@ -29,6 +31,7 @@
         "data": {
           "name": "Имя notify-сущности",
           "vk_group_id": "VK group ID",
+          "enable_incoming_messages": "Включить входящие сообщения VK",
           "vk_wall_access_token": "Токен для постов на стене",
           "vk_api_version": "Версия VK API",
           "request_timeout": "Таймаут запроса"
@@ -37,6 +40,7 @@
     },
     "error": {
       "cannot_connect": "Не удалось подключиться к VK",
+      "incoming_not_available": "Входящие сообщения VK недоступны для этой конфигурации сообщества",
       "invalid_auth": "Ошибка авторизации",
       "invalid_input": "Некорректное значение конфигурации",
       "vk_error": "VK отклонил конфигурацию"

@@ -22,7 +22,7 @@ body:
     id: integration_version
     attributes:
       label: ha-vk version
-      placeholder: "0.2.2"
+      placeholder: "1.0.0"
     validations:
       required: true
 
