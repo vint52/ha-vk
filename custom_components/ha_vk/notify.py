@@ -30,7 +30,8 @@ class HaVkNotifyEntity(NotifyEntity):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the notify entity."""
 
-        self._client = hass.data[DOMAIN][entry.entry_id]
+        runtime = hass.data[DOMAIN][entry.entry_id]
+        self._client = getattr(runtime, "client", runtime)
         self._attr_name = entry.title or DEFAULT_NAME
         self._attr_unique_id = entry.entry_id
 

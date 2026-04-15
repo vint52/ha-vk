@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import mimetypes
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -19,6 +19,9 @@ from .const import (
 )
 
 VK_API_BASE = "https://api.vk.com/method"
+VK_LONG_POLL_MODE = 2
+VK_LONG_POLL_VERSION = 10
+VK_LONG_POLL_WAIT = 25
 
 
 class VkApiError(RuntimeError):
@@ -35,10 +38,25 @@ class VkClientConfig:
 
     access_token: str
     peer_id: int
+    enable_incoming_messages: bool = False
     wall_access_token: str | None = None
     group_id: int | None = None
     api_version: str = DEFAULT_API_VERSION
     request_timeout: float = DEFAULT_REQUEST_TIMEOUT
+
+
+@dataclass(slots=True, frozen=True)
+class VkLongPollServer:
+    """Connection parameters for VK group long poll."""
+
+    server: str
+    key: str
+    ts: str
+
+    def with_ts(self, ts: Any) -> "VkLongPollServer":
+        """Return a new server state with an updated ts cursor."""
+
+        return replace(self, ts=str(ts))
 
 
 def build_client_config(data: dict[str, Any]) -> VkClientConfig:
@@ -66,6 +84,7 @@ def build_client_config(data: dict[str, Any]) -> VkClientConfig:
     return VkClientConfig(
         access_token=access_token,
         peer_id=peer_id,
+        enable_incoming_messages=bool(data.get("enable_incoming_messages", False)),
         wall_access_token=wall_access_token,
         group_id=group_id,
         api_version=api_version,
@@ -80,6 +99,18 @@ def _parse_int(value: Any, label: str) -> int:
         return int(str(value).strip())
     except (TypeError, ValueError) as err:
         raise VkConfigError(f"{label} must be an integer") from err
+
+
+def _coerce_int(value: Any, default: int | None = None) -> int | None:
+    """Best-effort conversion for optional integer values."""
+
+    if value in (None, ""):
+        return default
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _parse_float(value: Any, label: str) -> float:
@@ -133,6 +164,12 @@ class VkClient:
         self._session = session
         self._config = config
 
+    @property
+    def supports_incoming_messages(self) -> bool:
+        """Return True when the config can listen for incoming messages."""
+
+        return self._config.enable_incoming_messages and self._config.group_id is not None
+
     async def async_validate_config(self) -> None:
         """Validate a config entry against VK API."""
 
@@ -148,6 +185,8 @@ class VkClient:
                 token=self._config.access_token,
                 group_id=self._config.group_id,
             )
+        if self._config.enable_incoming_messages:
+            await self.async_get_long_poll_server()
         if self._config.wall_access_token:
             if self._config.group_id is None:
                 await self._api_call(
@@ -160,6 +199,126 @@ class VkClient:
                     token=self._config.wall_access_token,
                     group_id=self._config.group_id,
                 )
+
+    async def async_get_long_poll_server(self) -> VkLongPollServer:
+        """Fetch long poll connection parameters for the configured community."""
+
+        if self._config.group_id is None:
+            raise VkConfigError("VK group ID is required for incoming messages")
+
+        response = await self._api_call(
+            "groups.getLongPollServer",
+            token=self._config.access_token,
+            group_id=self._config.group_id,
+        )
+        if not isinstance(response, dict):
+            raise VkApiError("groups.getLongPollServer: invalid response from VK")
+
+        try:
+            server = str(response["server"]).strip()
+            key = str(response["key"]).strip()
+            ts = str(response["ts"]).strip()
+        except KeyError as err:
+            raise VkApiError("groups.getLongPollServer: missing long poll data") from err
+
+        if not server or not key or not ts:
+            raise VkApiError("groups.getLongPollServer: invalid long poll data")
+
+        return VkLongPollServer(server=server, key=key, ts=ts)
+
+    async def async_check_long_poll(
+        self,
+        server: VkLongPollServer,
+    ) -> tuple[VkLongPollServer, list[dict[str, Any]]]:
+        """Read one batch of long poll updates."""
+
+        timeout = ClientTimeout(total=self._config.request_timeout + VK_LONG_POLL_WAIT + 5)
+        try:
+            async with self._session.get(
+                server.server,
+                params={
+                    "act": "a_check",
+                    "key": server.key,
+                    "ts": server.ts,
+                    "wait": VK_LONG_POLL_WAIT,
+                    "mode": VK_LONG_POLL_MODE,
+                    "version": VK_LONG_POLL_VERSION,
+                },
+                timeout=timeout,
+            ) as response:
+                if response.status >= 400:
+                    raise VkApiError(f"VK long poll: {await _summarize_response(response)}")
+                payload = await response.json(content_type=None)
+        except (ClientError, asyncio.TimeoutError) as err:
+            raise VkApiError("VK long poll: network error") from err
+
+        if not isinstance(payload, dict):
+            raise VkApiError("VK long poll: invalid response from VK")
+
+        failed = payload.get("failed")
+        if failed is not None:
+            try:
+                failed_code = int(failed)
+            except (TypeError, ValueError) as err:
+                raise VkApiError("VK long poll: invalid failure code") from err
+
+            if failed_code == 1:
+                ts = payload.get("ts")
+                if ts is None:
+                    raise VkApiError("VK long poll: missing ts after failed=1")
+                return server.with_ts(ts), []
+
+            if failed_code in (2, 3):
+                return await self.async_get_long_poll_server(), []
+
+            raise VkApiError(f"VK long poll: failed={failed_code}")
+
+        updates = payload.get("updates")
+        ts = payload.get("ts")
+        if not isinstance(updates, list) or ts is None:
+            raise VkApiError("VK long poll: missing updates payload")
+
+        normalized_updates = [item for item in updates if isinstance(item, dict)]
+        return server.with_ts(ts), normalized_updates
+
+    def normalize_incoming_message_event(self, event: dict[str, Any]) -> dict[str, Any] | None:
+        """Normalize a VK message_new event for Home Assistant automations."""
+
+        if event.get("type") != "message_new":
+            return None
+
+        event_object = event.get("object")
+        if not isinstance(event_object, dict):
+            return None
+
+        message = event_object.get("message", event_object)
+        if not isinstance(message, dict):
+            return None
+
+        peer_id = _coerce_int(message.get("peer_id"))
+        if peer_id is None or peer_id != self._config.peer_id:
+            return None
+
+        if _coerce_int(message.get("out"), default=0) != 0:
+            return None
+
+        attachments = message.get("attachments")
+        if not isinstance(attachments, list):
+            attachments = []
+
+        text = message.get("text")
+        return {
+            "group_id": _coerce_int(event.get("group_id"), self._config.group_id),
+            "peer_id": peer_id,
+            "from_id": _coerce_int(message.get("from_id")),
+            "conversation_message_id": _coerce_int(message.get("conversation_message_id")),
+            "message_id": _coerce_int(message.get("id")),
+            "event_id": event.get("event_id"),
+            "date": _coerce_int(message.get("date")),
+            "text": text if isinstance(text, str) else "",
+            "attachments": attachments,
+            "raw_event": event,
+        }
 
     async def async_send_message(
         self,

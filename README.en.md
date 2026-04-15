@@ -21,6 +21,7 @@ This integration is based on the behavior of the earlier [`vint52/homeassistent_
 - text messages via `notify`
 - text messages with optional image or video attachments via `ha_vk.send_message`
 - wall posts via `ha_vk.send_post`
+- incoming community messages as Home Assistant events via `ha_vk_incoming_message`
 
 ## Installation
 
@@ -47,12 +48,14 @@ The setup flow asks for:
 - `Notify entity name`: used as the Home Assistant notify entity name
 - `VK access token`: community token used for messages and uploads
 - `VK peer ID`: user ID or chat peer ID
-- `VK group ID`: required for wall posts
+- `VK group ID`: required for wall posts and incoming community messages
+- `Enable incoming VK messages`: turns on VK long poll and Home Assistant events for new messages from the configured peer
 - `VK wall access token`: optional user token for photos/videos on the community wall and for uploading videos on behalf of a user
 - `VK API version`: defaults to `5.131`
 - `Request timeout`: defaults to `30`
 
 Detailed instructions for obtaining all required VK tokens and IDs are available in [`TOKENS.en.md`](TOKENS.en.md).
+Ready-to-use automation snippets and usage ideas are collected in [`docs/examples.en.md`](docs/examples.en.md).
 
 After setup, Home Assistant creates a notify entity named from your chosen title.
 Example: if the title is `ha-vk`, you will get a notify entity such as `notify.ha_vk`.
@@ -102,6 +105,45 @@ data:
 
 Use `type: document` to force document upload when VK video upload is not desired. Pass only one of `image` or `video` in a single `ha_vk.send_message` call.
 
+### Incoming messages
+
+When `Enable incoming VK messages` is turned on, `VK group ID` is configured, and the community token has access to community messages, `ha-vk` starts a VK long poll receiver and fires a Home Assistant event for each new incoming message from the configured `VK peer ID`.
+
+Event type:
+
+```text
+ha_vk_incoming_message
+```
+
+Event payload includes:
+
+- `entry_id`
+- `group_id`
+- `peer_id`
+- `from_id`
+- `conversation_message_id`
+- `message_id`
+- `event_id`
+- `date`
+- `text`
+- `attachments`
+- `raw_event`
+
+Example automation:
+
+```yaml
+automation:
+  - alias: React to incoming VK message
+    trigger:
+      - platform: event
+        event_type: ha_vk_incoming_message
+    action:
+      - action: logbook.log
+        data:
+          name: VK
+          message: "{{ trigger.event.data.text }}"
+```
+
 ### Wall post
 
 ```yaml
@@ -141,6 +183,8 @@ Each config entry also gets its own notify entity under the `notify` domain.
 ## VK setup notes
 
 - `VK peer ID`: use a user ID for direct messages, or `2000000000 + chat_id` for group chats.
+- Incoming messages are emitted only for the configured `VK peer ID`.
+- `VK group ID`: required for incoming community messages because VK group long poll is bound to the community ID.
 - `VK wall access token`: needed for photos/videos on the community wall and for uploading videos on behalf of a user. Without it, videos in messages can still be sent as documents, but photos and videos cannot be posted on the community wall.
 - The integration downloads media URLs from Home Assistant, so the URLs must be reachable from your HA instance.
 
@@ -149,6 +193,7 @@ Each config entry also gets its own notify entity under the `notify` domain.
 - `Failed to download media file`: the media URL is unreachable from Home Assistant.
 - `URL content type ... is not supported`: the remote server returned a non-image or non-video content type.
 - If `ha_vk.send_post` publishes text without the image: configure a user token with `wall`, `photos`, `video`, and `offline` scopes in `VK wall access token`.
+- `Incoming VK messages are unavailable for this community configuration`: verify that community messages are enabled in VK and that the community token can access long poll for the selected group.
 - `VK wall access token is invalid`: generate a new user token. If you get it through `https://vkhost.github.io/` and see `{"error":"invalid_request","error_description":"application is blocked"}`, try another app from the service list, for example `VK Admin`, `VK Admin (iOS)`, `vk.com`, or `Kate Mobile`.
 - `Multiple ha-vk entries are configured; pass entry_id explicitly`: add `entry_id` to the custom service call.
 

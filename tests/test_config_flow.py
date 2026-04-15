@@ -9,8 +9,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.ha_vk.api import VkApiError
 from custom_components.ha_vk.const import (
     CONF_API_VERSION,
+    CONF_ENABLE_INCOMING_MESSAGES,
     CONF_GROUP_ID,
     CONF_NAME,
     CONF_PEER_ID,
@@ -31,6 +33,7 @@ async def test_user_flow_creates_entry(hass: HomeAssistant) -> None:
         CONF_VK_ACCESS_TOKEN: "token",
         CONF_PEER_ID: "2000000123",
         CONF_GROUP_ID: "42",
+        CONF_ENABLE_INCOMING_MESSAGES: True,
         CONF_VK_WALL_ACCESS_TOKEN: "wall",
         CONF_API_VERSION: DEFAULT_API_VERSION,
         CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
@@ -52,6 +55,7 @@ async def test_user_flow_creates_entry(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "vk_alerts"
     assert result["data"][CONF_PEER_ID] == "2000000123"
+    assert result["options"][CONF_ENABLE_INCOMING_MESSAGES] is True
     assert result["options"][CONF_VK_WALL_ACCESS_TOKEN] == "wall"
 
 
@@ -69,6 +73,7 @@ async def test_options_flow_updates_options(hass: HomeAssistant) -> None:
             CONF_GROUP_ID: "42",
         },
         options={
+            CONF_ENABLE_INCOMING_MESSAGES: False,
             CONF_VK_WALL_ACCESS_TOKEN: "old",
             CONF_API_VERSION: DEFAULT_API_VERSION,
             CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
@@ -86,6 +91,7 @@ async def test_options_flow_updates_options(hass: HomeAssistant) -> None:
             user_input={
                 CONF_NAME: "vk_family",
                 CONF_GROUP_ID: "77",
+                CONF_ENABLE_INCOMING_MESSAGES: True,
                 CONF_VK_WALL_ACCESS_TOKEN: "new",
                 CONF_API_VERSION: "5.199",
                 CONF_REQUEST_TIMEOUT: 60,
@@ -94,6 +100,38 @@ async def test_options_flow_updates_options(hass: HomeAssistant) -> None:
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_GROUP_ID] == "77"
+    assert result["data"][CONF_ENABLE_INCOMING_MESSAGES] is True
     assert result["data"][CONF_VK_WALL_ACCESS_TOKEN] == "new"
     assert entry.title == "vk_family"
     assert entry.data[CONF_NAME] == "vk_family"
+
+
+async def test_user_flow_surfaces_incoming_message_setup_errors(hass: HomeAssistant) -> None:
+    """Long poll validation failures should get a dedicated config flow error."""
+
+    user_input = {
+        CONF_NAME: "vk_alerts",
+        CONF_VK_ACCESS_TOKEN: "token",
+        CONF_PEER_ID: "2000000123",
+        CONF_GROUP_ID: "42",
+        CONF_ENABLE_INCOMING_MESSAGES: True,
+        CONF_VK_WALL_ACCESS_TOKEN: "",
+        CONF_API_VERSION: DEFAULT_API_VERSION,
+        CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
+    }
+
+    with patch(
+        "custom_components.ha_vk.config_flow._async_validate_input",
+        side_effect=VkApiError("groups.getLongPollServer: access denied"),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_USER},
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input=user_input,
+        )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"]["base"] == "incoming_not_available"

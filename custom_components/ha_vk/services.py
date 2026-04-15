@@ -112,13 +112,14 @@ def _resolve_client(hass: HomeAssistant, service_data: dict[str, Any]):
 
     entry_id = service_data.get(CONF_ENTRY_ID)
     if entry_id:
-        client = clients.get(entry_id)
-        if client is None:
+        client_or_runtime = clients.get(entry_id)
+        if client_or_runtime is None:
             raise ServiceValidationError(f"Unknown ha-vk entry_id: {entry_id}")
-        return client
+        return getattr(client_or_runtime, "client", client_or_runtime)
 
     if len(clients) == 1:
-        return next(iter(clients.values()))
+        client_or_runtime = next(iter(clients.values()))
+        return getattr(client_or_runtime, "client", client_or_runtime)
 
     raise ServiceValidationError(
         "Multiple ha-vk entries are configured; pass entry_id explicitly"

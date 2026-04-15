@@ -14,6 +14,7 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from .api import VkApiError, VkClient, VkConfigError, build_client_config
 from .const import (
     CONF_API_VERSION,
+    CONF_ENABLE_INCOMING_MESSAGES,
     CONF_GROUP_ID,
     CONF_PEER_ID,
     CONF_REQUEST_TIMEOUT,
@@ -55,6 +56,10 @@ def _build_user_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
                 selector.TextSelectorConfig(),
             ),
             vol.Optional(
+                CONF_ENABLE_INCOMING_MESSAGES,
+                default=values.get(CONF_ENABLE_INCOMING_MESSAGES, False),
+            ): selector.BooleanSelector(),
+            vol.Optional(
                 CONF_VK_WALL_ACCESS_TOKEN,
                 default=values.get(CONF_VK_WALL_ACCESS_TOKEN, ""),
             ): selector.TextSelector(
@@ -91,6 +96,10 @@ def _build_options_schema(user_input: dict[str, Any] | None = None) -> vol.Schem
                 CONF_GROUP_ID,
                 default=values.get(CONF_GROUP_ID, ""),
             ): selector.TextSelector(selector.TextSelectorConfig()),
+            vol.Optional(
+                CONF_ENABLE_INCOMING_MESSAGES,
+                default=values.get(CONF_ENABLE_INCOMING_MESSAGES, False),
+            ): selector.BooleanSelector(),
             vol.Optional(
                 CONF_VK_WALL_ACCESS_TOKEN,
                 default=values.get(CONF_VK_WALL_ACCESS_TOKEN, ""),
@@ -138,6 +147,7 @@ def _entry_options(user_input: dict[str, Any]) -> dict[str, Any]:
 
     return {
         CONF_GROUP_ID: str(user_input.get(CONF_GROUP_ID, "")).strip(),
+        CONF_ENABLE_INCOMING_MESSAGES: bool(user_input.get(CONF_ENABLE_INCOMING_MESSAGES, False)),
         CONF_VK_WALL_ACCESS_TOKEN: str(user_input.get(CONF_VK_WALL_ACCESS_TOKEN, "")).strip(),
         CONF_API_VERSION: str(user_input.get(CONF_API_VERSION, DEFAULT_API_VERSION)).strip()
         or DEFAULT_API_VERSION,
@@ -167,11 +177,16 @@ class HaVkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 await _async_validate_input(self.hass, user_input)
-            except VkConfigError:
-                errors["base"] = "invalid_input"
+            except VkConfigError as err:
+                if "incoming messages" in str(err).lower():
+                    errors["base"] = "incoming_not_available"
+                else:
+                    errors["base"] = "invalid_input"
             except VkApiError as err:
                 lower = str(err).lower()
-                if "invalid access token" in lower or "access denied" in lower:
+                if "groups.getlongpollserver" in lower or "vk long poll" in lower:
+                    errors["base"] = "incoming_not_available"
+                elif "invalid access token" in lower or "access denied" in lower:
                     errors["base"] = "invalid_auth"
                 elif "network error" in lower:
                     errors["base"] = "cannot_connect"
@@ -209,11 +224,16 @@ class HaVkOptionsFlow(config_entries.OptionsFlow):
             merged = {**self.config_entry.data, **user_input}
             try:
                 await _async_validate_input(self.hass, merged)
-            except VkConfigError:
-                errors["base"] = "invalid_input"
+            except VkConfigError as err:
+                if "incoming messages" in str(err).lower():
+                    errors["base"] = "incoming_not_available"
+                else:
+                    errors["base"] = "invalid_input"
             except VkApiError as err:
                 lower = str(err).lower()
-                if "invalid access token" in lower or "access denied" in lower:
+                if "groups.getlongpollserver" in lower or "vk long poll" in lower:
+                    errors["base"] = "incoming_not_available"
+                elif "invalid access token" in lower or "access denied" in lower:
                     errors["base"] = "invalid_auth"
                 elif "network error" in lower:
                     errors["base"] = "cannot_connect"
