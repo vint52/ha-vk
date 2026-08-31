@@ -12,7 +12,8 @@
           "enable_incoming_messages": "Включить входящие сообщения VK",
           "vk_wall_access_token": "Токен для постов на стене",
           "vk_api_version": "Версия VK API",
-          "request_timeout": "Таймаут запроса"
+          "request_timeout": "Таймаут запроса",
+          "send_retries": "Повторы отправки при сбоях сети"
         }
       },
       "reauth_confirm": {
@@ -48,7 +49,8 @@
           "enable_incoming_messages": "Включить входящие сообщения VK",
           "vk_wall_access_token": "Токен для постов на стене",
           "vk_api_version": "Версия VK API",
-          "request_timeout": "Таймаут запроса"
+          "request_timeout": "Таймаут запроса",
+          "send_retries": "Повторы отправки при сбоях сети"
         }
       }
     },

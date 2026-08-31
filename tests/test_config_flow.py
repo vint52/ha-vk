@@ -17,10 +17,12 @@ from custom_components.ha_vk.const import (
     CONF_NAME,
     CONF_PEER_ID,
     CONF_REQUEST_TIMEOUT,
+    CONF_SEND_RETRIES,
     CONF_VK_ACCESS_TOKEN,
     CONF_VK_WALL_ACCESS_TOKEN,
     DEFAULT_API_VERSION,
     DEFAULT_REQUEST_TIMEOUT,
+    DEFAULT_SEND_RETRIES,
     DOMAIN,
 )
 
@@ -37,6 +39,7 @@ async def test_user_flow_creates_entry(hass: HomeAssistant) -> None:
         CONF_VK_WALL_ACCESS_TOKEN: "wall",
         CONF_API_VERSION: DEFAULT_API_VERSION,
         CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
+        CONF_SEND_RETRIES: DEFAULT_SEND_RETRIES,
     }
 
     with patch(
@@ -57,6 +60,7 @@ async def test_user_flow_creates_entry(hass: HomeAssistant) -> None:
     assert result["data"][CONF_PEER_ID] == "2000000123"
     assert result["options"][CONF_ENABLE_INCOMING_MESSAGES] is True
     assert result["options"][CONF_VK_WALL_ACCESS_TOKEN] == "wall"
+    assert result["options"][CONF_SEND_RETRIES] == DEFAULT_SEND_RETRIES
 
 
 async def test_options_flow_updates_options(hass: HomeAssistant) -> None:
@@ -97,6 +101,7 @@ async def test_options_flow_updates_options(hass: HomeAssistant) -> None:
                 CONF_VK_WALL_ACCESS_TOKEN: "new",
                 CONF_API_VERSION: "5.199",
                 CONF_REQUEST_TIMEOUT: 60,
+                CONF_SEND_RETRIES: 5,
             },
         )
 
@@ -104,6 +109,7 @@ async def test_options_flow_updates_options(hass: HomeAssistant) -> None:
     assert result["data"][CONF_GROUP_ID] == "77"
     assert result["data"][CONF_ENABLE_INCOMING_MESSAGES] is True
     assert result["data"][CONF_VK_WALL_ACCESS_TOKEN] == "new"
+    assert result["data"][CONF_SEND_RETRIES] == 5
     assert entry.title == "vk_family"
     assert entry.data[CONF_NAME] == "vk_family"
     assert entry.data[CONF_VK_ACCESS_TOKEN] == "new-token"
@@ -222,6 +228,28 @@ async def test_validate_input_uses_shared_session(hass: HomeAssistant) -> None:
         )
 
     assert vk_client.call_args[0][0] is async_get_clientsession(hass)
+
+
+async def test_validate_input_disables_retries(hass: HomeAssistant) -> None:
+    """Config validation should fail fast instead of retrying for minutes."""
+
+    from unittest.mock import AsyncMock
+
+    from custom_components.ha_vk import config_flow
+
+    with patch.object(config_flow, "VkClient") as vk_client:
+        vk_client.return_value.async_validate_config = AsyncMock()
+        await config_flow._async_validate_input(
+            hass,
+            {
+                CONF_VK_ACCESS_TOKEN: "token",
+                CONF_PEER_ID: "2000000123",
+                CONF_SEND_RETRIES: 7,
+            },
+        )
+
+    config = vk_client.call_args[0][1]
+    assert config.send_retries == 0
 
 
 def test_validation_error_key_maps_typed_exceptions() -> None:

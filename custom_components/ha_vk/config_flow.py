@@ -27,21 +27,23 @@ from .const import (
     CONF_GROUP_ID,
     CONF_PEER_ID,
     CONF_REQUEST_TIMEOUT,
+    CONF_SEND_RETRIES,
     CONF_VK_ACCESS_TOKEN,
     CONF_VK_WALL_ACCESS_TOKEN,
     DEFAULT_API_VERSION,
     DEFAULT_NAME,
     DEFAULT_REQUEST_TIMEOUT,
+    DEFAULT_SEND_RETRIES,
     DOMAIN,
 )
 
 
 async def _async_validate_input(hass: HomeAssistant, user_input: dict[str, Any]) -> None:
-    """Validate the provided config against VK."""
+    """Validate the provided config against VK (retries disabled for fast feedback)."""
 
     client = VkClient(
         async_get_clientsession(hass),
-        build_client_config(user_input),
+        build_client_config({**user_input, CONF_SEND_RETRIES: 0}),
     )
     await client.async_validate_config()
 
@@ -84,6 +86,17 @@ def _build_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=1,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Required(
+                CONF_SEND_RETRIES,
+                default=values.get(CONF_SEND_RETRIES, DEFAULT_SEND_RETRIES),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=10,
                     step=1,
                     mode=selector.NumberSelectorMode.BOX,
                 )
@@ -149,6 +162,7 @@ def _entry_options(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_API_VERSION: str(user_input.get(CONF_API_VERSION, DEFAULT_API_VERSION)).strip()
         or DEFAULT_API_VERSION,
         CONF_REQUEST_TIMEOUT: float(user_input.get(CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT)),
+        CONF_SEND_RETRIES: int(user_input.get(CONF_SEND_RETRIES, DEFAULT_SEND_RETRIES)),
     }
 
 

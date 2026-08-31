@@ -12,7 +12,8 @@
           "enable_incoming_messages": "Enable incoming VK messages",
           "vk_wall_access_token": "VK wall access token",
           "vk_api_version": "VK API version",
-          "request_timeout": "Request timeout"
+          "request_timeout": "Request timeout",
+          "send_retries": "Send retries on network errors"
         }
       },
       "reauth_confirm": {
@@ -48,7 +49,8 @@
           "enable_incoming_messages": "Enable incoming VK messages",
           "vk_wall_access_token": "VK wall access token",
           "vk_api_version": "VK API version",
-          "request_timeout": "Request timeout"
+          "request_timeout": "Request timeout",
+          "send_retries": "Send retries on network errors"
         }
       }
     },
