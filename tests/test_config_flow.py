@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.ha_vk.api import VkApiError
+from custom_components.ha_vk.api import VkApiError, VkLongPollError
 from custom_components.ha_vk.const import (
     CONF_API_VERSION,
     CONF_ENABLE_INCOMING_MESSAGES,
@@ -187,7 +187,7 @@ async def test_user_flow_surfaces_incoming_message_setup_errors(hass: HomeAssist
 
     with patch(
         "custom_components.ha_vk.config_flow._async_validate_input",
-        side_effect=VkApiError("groups.getLongPollServer: access denied"),
+        side_effect=VkLongPollError("groups.getLongPollServer: access denied", code=15),
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -200,3 +200,86 @@ async def test_user_flow_surfaces_incoming_message_setup_errors(hass: HomeAssist
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"]["base"] == "incoming_not_available"
+
+
+async def test_validate_input_uses_shared_session(hass: HomeAssistant) -> None:
+    """Validation must reuse the shared HA session instead of creating new ones."""
+
+    from unittest.mock import AsyncMock
+
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+    from custom_components.ha_vk import config_flow
+
+    with patch.object(config_flow, "VkClient") as vk_client:
+        vk_client.return_value.async_validate_config = AsyncMock()
+        await config_flow._async_validate_input(
+            hass,
+            {
+                CONF_VK_ACCESS_TOKEN: "token",
+                CONF_PEER_ID: "2000000123",
+            },
+        )
+
+    assert vk_client.call_args[0][0] is async_get_clientsession(hass)
+
+
+def test_validation_error_key_maps_typed_exceptions() -> None:
+    """Error keys should be derived from exception types, not message text."""
+
+    from custom_components.ha_vk.api import (
+        VkAuthError,
+        VkLongPollError,
+        VkNetworkError,
+    )
+    from custom_components.ha_vk.config_flow import _validation_error_key
+
+    assert _validation_error_key(VkLongPollError("boom")) == "incoming_not_available"
+    assert _validation_error_key(VkAuthError("boom", code=5)) == "invalid_auth"
+    assert _validation_error_key(VkNetworkError("boom")) == "cannot_connect"
+    assert _validation_error_key(VkApiError("boom")) == "vk_error"
+
+
+async def test_reauth_flow_updates_tokens(hass: HomeAssistant) -> None:
+    """Reauth should revalidate and persist fresh tokens without recreating the entry."""
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="vk_alerts",
+        unique_id="peer:2000000123|group:42",
+        data={
+            CONF_NAME: "vk_alerts",
+            CONF_VK_ACCESS_TOKEN: "stale-token",
+            CONF_PEER_ID: "2000000123",
+            CONF_GROUP_ID: "42",
+        },
+        options={
+            CONF_ENABLE_INCOMING_MESSAGES: False,
+            CONF_VK_WALL_ACCESS_TOKEN: "stale-wall",
+            CONF_API_VERSION: DEFAULT_API_VERSION,
+            CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    with patch(
+        "custom_components.ha_vk.config_flow._async_validate_input",
+        return_value=None,
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_VK_ACCESS_TOKEN: "fresh-token",
+                CONF_VK_WALL_ACCESS_TOKEN: "fresh-wall",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_VK_ACCESS_TOKEN] == "fresh-token"
+    assert entry.options[CONF_VK_WALL_ACCESS_TOKEN] == "fresh-wall"

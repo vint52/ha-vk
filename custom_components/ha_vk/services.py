@@ -23,7 +23,7 @@ from .const import (
     SERVICE_SEND_MESSAGE,
     SERVICE_SEND_POST,
 )
-from .receiver import HaVkEntryRuntime
+from .receiver import HaVkConfigEntry
 
 MESSAGE_SERVICE_SCHEMA = vol.All(
     vol.Schema(
@@ -107,19 +107,19 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
 def _resolve_client(hass: HomeAssistant, service_data: dict[str, Any]) -> VkClient:
     """Resolve the target VK client for a service call."""
 
-    runtimes: dict[str, HaVkEntryRuntime] = hass.data.get(DOMAIN, {})
-    if not runtimes:
+    entries: list[HaVkConfigEntry] = hass.config_entries.async_loaded_entries(DOMAIN)
+    if not entries:
         raise ServiceValidationError("ha-vk is not configured")
 
     entry_id = service_data.get(CONF_ENTRY_ID)
     if entry_id:
-        runtime = runtimes.get(entry_id)
-        if runtime is None:
+        entry = next((item for item in entries if item.entry_id == entry_id), None)
+        if entry is None:
             raise ServiceValidationError(f"Unknown ha-vk entry_id: {entry_id}")
-        return runtime.client
+        return entry.runtime_data.client
 
-    if len(runtimes) == 1:
-        return next(iter(runtimes.values())).client
+    if len(entries) == 1:
+        return entries[0].runtime_data.client
 
     raise ServiceValidationError(
         "Multiple ha-vk entries are configured; pass entry_id explicitly"
