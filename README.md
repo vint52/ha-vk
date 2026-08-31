@@ -129,6 +129,10 @@ ha_vk_incoming_message
 - `attachments`
 - `raw_event`
 
+Если текст сообщения начинается с `/`, дополнительно публикуется событие
+`ha_vk_command` с полями `command`, `args` и `args_text` — см.
+[примеры](docs/examples.md).
+
 Пример automation:
 
 ```yaml

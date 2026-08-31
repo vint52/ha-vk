@@ -129,6 +129,10 @@ Event payload includes:
 - `attachments`
 - `raw_event`
 
+If the message text starts with `/`, an additional `ha_vk_command` event is
+fired with `command`, `args` and `args_text` fields — see
+[examples](docs/examples.en.md).
+
 Example automation:
 
 ```yaml

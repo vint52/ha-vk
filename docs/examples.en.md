@@ -24,6 +24,44 @@ Common event fields:
 - `attachments`
 - `raw_event`
 
+### Command Event
+
+If the message text starts with `/`, an additional event is fired next to
+`ha_vk_incoming_message`:
+
+```text
+ha_vk_command
+```
+
+It contains every `ha_vk_incoming_message` field plus:
+
+- `command` — lowercase command name, for example `light`
+- `args` — argument list, for example `["kitchen", "off"]`
+- `args_text` — the rest of the line after the command name, for example `kitchen off`
+
+For example, the message `/light kitchen off` yields `command: light`,
+`args: ["kitchen", "off"]`.
+
+Automation example:
+
+```yaml
+automation:
+  - alias: Control lights from VK
+    mode: parallel
+    trigger:
+      - platform: event
+        event_type: ha_vk_command
+        event_data:
+          command: light
+    condition:
+      - condition: template
+        value_template: "{{ trigger.event.data.args | length == 2 }}"
+    action:
+      - action: "light.turn_{{ trigger.event.data.args[1] }}"
+        target:
+          entity_id: "light.{{ trigger.event.data.args[0] }}"
+```
+
 ## Common Use Cases
 
 - Simple bot commands such as `/ping`, `/status`, `/help`

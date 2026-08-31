@@ -24,6 +24,44 @@ ha_vk_incoming_message
 - `attachments`
 - `raw_event`
 
+### Событие команды
+
+Если текст сообщения начинается с `/`, дополнительно к `ha_vk_incoming_message`
+публикуется событие:
+
+```text
+ha_vk_command
+```
+
+Оно содержит все поля `ha_vk_incoming_message` плюс:
+
+- `command` — имя команды в нижнем регистре, например `light`
+- `args` — список аргументов, например `["kitchen", "off"]`
+- `args_text` — хвост строки после имени команды, например `kitchen off`
+
+Например, сообщение `/light kitchen off` даёт `command: light`,
+`args: ["kitchen", "off"]`.
+
+Пример автоматизации:
+
+```yaml
+automation:
+  - alias: Управление светом из VK
+    mode: parallel
+    trigger:
+      - platform: event
+        event_type: ha_vk_command
+        event_data:
+          command: light
+    condition:
+      - condition: template
+        value_template: "{{ trigger.event.data.args | length == 2 }}"
+    action:
+      - action: "light.turn_{{ trigger.event.data.args[1] }}"
+        target:
+          entity_id: "light.{{ trigger.event.data.args[0] }}"
+```
+
 ## Варианты использования
 
 - Простые команды бота: `/ping`, `/status`, `/help`
