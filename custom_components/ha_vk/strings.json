@@ -14,6 +14,9 @@
           "vk_api_version": "VK API version",
           "request_timeout": "Request timeout",
           "send_retries": "Send retries on network errors"
+        },
+        "data_description": {
+          "send_retries": "Extra attempts on transient network errors with increasing pauses. 0 disables retries."
         }
       },
       "reauth_confirm": {
@@ -51,6 +54,9 @@
           "vk_api_version": "VK API version",
           "request_timeout": "Request timeout",
           "send_retries": "Send retries on network errors"
+        },
+        "data_description": {
+          "send_retries": "Extra attempts on transient network errors with increasing pauses. 0 disables retries."
         }
       }
     },
