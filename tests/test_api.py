@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from aiohttp import ClientError
@@ -369,10 +369,102 @@ async def test_api_call_raises_network_error() -> None:
 
     session = Mock()
     session.post = Mock(side_effect=ClientError())
-    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1))
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=0))
 
     with pytest.raises(VkNetworkError):
         await client._api_call("users.get", token="token")
+
+
+@pytest.mark.asyncio
+async def test_api_call_retries_network_errors_until_success() -> None:
+    """Transport failures should be retried with exponential backoff."""
+
+    session = Mock()
+    session.post = Mock(
+        side_effect=[ClientError(), ClientError(), MockAsyncResponse({"response": 1})]
+    )
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=3))
+
+    with patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock) as sleep:
+        result = await client._api_call("messages.send", token="token")
+
+    assert result == 1
+    assert session.post.call_count == 3
+    assert [call.args[0] for call in sleep.await_args_list] == [1.0, 2.0]
+
+
+@pytest.mark.asyncio
+async def test_api_call_raises_network_error_after_exhausting_retries() -> None:
+    """After send_retries extra attempts the original VkNetworkError should surface."""
+
+    session = Mock()
+    session.post = Mock(side_effect=ClientError())
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=2))
+
+    with (
+        patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        pytest.raises(VkNetworkError),
+    ):
+        await client._api_call("messages.send", token="token")
+
+    assert session.post.call_count == 3
+    assert [call.args[0] for call in sleep.await_args_list] == [1.0, 2.0]
+
+
+@pytest.mark.asyncio
+async def test_api_call_does_not_retry_vk_api_errors() -> None:
+    """Logical VK errors (error payload) should not be retried."""
+
+    session = Mock()
+    session.post = Mock(
+        return_value=MockAsyncResponse({"error": {"error_code": 100, "error_msg": "Bad params"}})
+    )
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=3))
+
+    with (
+        patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        pytest.raises(VkApiError),
+    ):
+        await client._api_call("messages.send", token="token")
+
+    assert session.post.call_count == 1
+    sleep.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_api_call_with_zero_retries_makes_single_attempt() -> None:
+    """send_retries=0 should keep the current single-attempt behavior."""
+
+    session = Mock()
+    session.post = Mock(side_effect=ClientError())
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=0))
+
+    with (
+        patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        pytest.raises(VkNetworkError),
+    ):
+        await client._api_call("messages.send", token="token")
+
+    assert session.post.call_count == 1
+    sleep.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_api_call_backoff_is_capped() -> None:
+    """Backoff delays should never exceed SEND_RETRY_MAX_DELAY."""
+
+    session = Mock()
+    session.post = Mock(side_effect=ClientError())
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=8))
+
+    with (
+        patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        pytest.raises(VkNetworkError),
+    ):
+        await client._api_call("messages.send", token="token")
+
+    delays = [call.args[0] for call in sleep.await_args_list]
+    assert delays == [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0]
 
 
 @pytest.mark.asyncio
@@ -514,3 +606,20 @@ def test_build_client_config_rejects_invalid_send_retries() -> None:
 
     with pytest.raises(VkConfigError, match="Send retries"):
         build_client_config({**base, "send_retries": "abc"})
+
+    with pytest.raises(VkConfigError, match="Send retries"):
+        build_client_config({**base, "send_retries": "inf"})
+
+
+def test_build_client_config_truncates_float_send_retries() -> None:
+    """Float send_retries values should be truncated to integers."""
+
+    config = build_client_config(
+        {
+            "vk_access_token": "token",
+            "vk_peer_id": "1",
+            "send_retries": 2.9,
+        }
+    )
+
+    assert config.send_retries == 2

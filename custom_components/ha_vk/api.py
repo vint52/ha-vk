@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import mimetypes
 import secrets
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,9 @@ from .const import (
     DEFAULT_API_VERSION,
     DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_SEND_RETRIES,
+    LOGGER,
+    SEND_RETRY_BACKOFF_BASE,
+    SEND_RETRY_MAX_DELAY,
     SEND_TYPE_DOCUMENT,
     SEND_TYPE_VIDEO,
 )
@@ -124,7 +129,7 @@ def build_client_config(data: dict[str, Any]) -> VkClientConfig:
     send_retries_raw = data.get("send_retries", DEFAULT_SEND_RETRIES)
     try:
         send_retries = int(float(send_retries_raw))
-    except (TypeError, ValueError) as err:
+    except (TypeError, ValueError, OverflowError) as err:
         raise VkConfigError("Send retries must be an integer") from err
     if send_retries < 0:
         raise VkConfigError("Send retries must be zero or greater")
@@ -659,6 +664,27 @@ class VkClient:
 
         return payload
 
+    async def _with_retries(self, label: str, request: Callable[[], Awaitable[Any]]) -> Any:
+        """Run a network request, retrying transport failures with backoff."""
+
+        attempts = self._config.send_retries + 1
+        for attempt in range(attempts):
+            try:
+                return await request()
+            except (TimeoutError, ClientError):
+                if attempt + 1 >= attempts:
+                    raise
+                delay = min(SEND_RETRY_BACKOFF_BASE * 2**attempt, SEND_RETRY_MAX_DELAY)
+                LOGGER.warning(
+                    "%s: network error, retry %d/%d in %.0fs",
+                    label,
+                    attempt + 1,
+                    attempts - 1,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+        raise RuntimeError("unreachable")  # pragma: no cover
+
     async def _api_call(self, method: str, token: str, **params: Any) -> Any:
         """Call a VK API method and return its `response` payload."""
 
@@ -669,7 +695,8 @@ class VkClient:
         payload.update({key: value for key, value in params.items() if value is not None})
 
         timeout = ClientTimeout(total=self._config.request_timeout)
-        try:
+
+        async def _request() -> Any:
             async with self._session.post(
                 f"{VK_API_BASE}/{method}",
                 data=payload,
@@ -677,7 +704,10 @@ class VkClient:
             ) as response:
                 if response.status >= 400:
                     raise VkApiError(f"{method}: {await _summarize_response(response)}")
-                data = await response.json(content_type=None)
+                return await response.json(content_type=None)
+
+        try:
+            data = await self._with_retries(method, _request)
         except (TimeoutError, ClientError) as err:
             raise VkNetworkError(f"{method}: network error") from err
 
