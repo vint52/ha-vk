@@ -115,3 +115,6 @@ class HaVkEntryRuntime:
 
         if self.receiver is not None:
             await self.receiver.async_stop()
+
+
+type HaVkConfigEntry = ConfigEntry[HaVkEntryRuntime]

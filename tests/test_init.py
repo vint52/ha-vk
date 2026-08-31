@@ -53,3 +53,32 @@ async def test_entry_setup_starts_and_unload_stops_receiver(hass) -> None:
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
         assert stop.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_entry_setup_stores_runtime_in_runtime_data(hass) -> None:
+    """Runtime state should live in entry.runtime_data, not hass.data."""
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="vk_alerts",
+        data={
+            CONF_NAME: "vk_alerts",
+            CONF_VK_ACCESS_TOKEN: "token",
+            CONF_PEER_ID: "2000000123",
+            CONF_GROUP_ID: "",
+        },
+        options={
+            CONF_ENABLE_INCOMING_MESSAGES: False,
+            CONF_API_VERSION: DEFAULT_API_VERSION,
+            CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data is not None
+    assert entry.runtime_data.client is not None
+    assert not hass.data.get(DOMAIN)
