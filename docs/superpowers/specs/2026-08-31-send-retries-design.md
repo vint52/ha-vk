@@ -23,7 +23,8 @@ Issue: #11 — «поддержка повторов отправки в слу�
 - Сохраняется в options (`_entry_options`).
 - `VkClientConfig` получает поле `send_retries: int = DEFAULT_SEND_RETRIES`.
 - `build_client_config` парсит значение как целое `>= 0`
-  (`VkConfigError` при некорректном значении).
+  (`VkConfigError` при некорректном значении, включая `OverflowError`
+  от бесконечных значений).
 - Переводы: `strings.json`, `translations/en.json`, `translations/ru.json`.
 
 ## Retry logic (api.py)
@@ -37,7 +38,11 @@ Issue: #11 — «поддержка повторов отправки в слу�
 - НЕ повторяются: логические ошибки VK API (`error` в ответе, включая auth),
   HTTP-статусы `>= 400`, ошибки валидации содержимого.
 - Бэкофф: `SEND_RETRY_BACKOFF_BASE = 1.0` секунда, экспоненциально —
-  паузы 1s, 2s, 4s, … (`base * 2**attempt`) через `asyncio.sleep`.
+  паузы 1s, 2s, 4s, … (`base * 2**attempt`) через `asyncio.sleep`,
+  с потолком `SEND_RETRY_MAX_DELAY = 60.0` секунд
+  (`min(base * 2**attempt, SEND_RETRY_MAX_DELAY)`), по аналогии
+  с `LONG_POLL_MAX_RETRY_DELAY` в receiver — иначе большое значение
+  `send_retries` даёт многочасовые паузы внутри notify-вызова.
 - Максимум `send_retries` повторов (то есть `send_retries + 1` попыток).
 - После исчерпания попыток наружу летят те же исключения, что и сейчас
   (`VkNetworkError` из `_api_call`, `VkApiError` из download/upload) —
