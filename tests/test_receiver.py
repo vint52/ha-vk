@@ -152,6 +152,75 @@ async def test_receiver_triggers_reauth_on_auth_error(hass: HomeAssistant) -> No
     reauth.assert_called_once_with(hass)
 
 
+@pytest.mark.asyncio
+async def test_receiver_emits_command_event(hass: HomeAssistant) -> None:
+    """Command messages should fire both the incoming and the command event."""
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.ha_vk.const import COMMAND_EVENT, DOMAIN
+
+    client = VkClient(Mock(), VkClientConfig(access_token="token", peer_id=2000000123, group_id=42))
+    client.async_get_long_poll_server = AsyncMock(  # type: ignore[method-assign]
+        return_value=VkLongPollServer(server="https://lp.example.com", key="secret", ts="100")
+    )
+    client.async_check_long_poll = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            (
+                VkLongPollServer(server="https://lp.example.com", key="secret", ts="101"),
+                [{"type": "message_new"}, {"type": "message_new"}],
+            ),
+            asyncio.CancelledError(),
+        ]
+    )
+    client.normalize_incoming_message_event = Mock(  # type: ignore[method-assign]
+        side_effect=[
+            {"peer_id": 2000000123, "from_id": 555, "text": "/light kitchen off"},
+            {"peer_id": 2000000123, "from_id": 555, "text": "hello"},
+        ]
+    )
+
+    incoming: list[Event] = []
+    commands: list[Event] = []
+    done = asyncio.Event()
+
+    @callback
+    def _handle_incoming(event: Event) -> None:
+        incoming.append(event)
+        if len(incoming) == 2:
+            done.set()
+
+    @callback
+    def _handle_command(event: Event) -> None:
+        commands.append(event)
+
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="entry-1")
+    entry.add_to_hass(hass)
+
+    unsub_incoming = hass.bus.async_listen(INCOMING_EVENT, _handle_incoming)
+    unsub_command = hass.bus.async_listen(COMMAND_EVENT, _handle_command)
+    receiver = VkIncomingMessageReceiver(hass, entry, client)
+
+    try:
+        await receiver.async_start()
+        await asyncio.wait_for(done.wait(), timeout=1)
+        await hass.async_block_till_done()
+    finally:
+        await receiver.async_stop()
+        unsub_incoming()
+        unsub_command()
+
+    assert len(incoming) == 2
+    assert len(commands) == 1
+    data = commands[0].data
+    assert data["entry_id"] == "entry-1"
+    assert data["from_id"] == 555
+    assert data["text"] == "/light kitchen off"
+    assert data["command"] == "light"
+    assert data["args"] == ["kitchen", "off"]
+    assert data["args_text"] == "kitchen off"
+
+
 @pytest.mark.parametrize(
     ("text", "expected"),
     [

@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 
 from .api import VkApiError, VkClient, VkLongPollServer, is_auth_error
 from .const import (
+    COMMAND_EVENT,
     DOMAIN,
     INCOMING_EVENT,
     LOGGER,
@@ -115,10 +116,13 @@ class VkIncomingMessageReceiver:
             if normalized is None:
                 continue
 
-            self._hass.bus.async_fire(
-                INCOMING_EVENT,
-                {"entry_id": self._entry.entry_id, **normalized},
-            )
+            payload = {"entry_id": self._entry.entry_id, **normalized}
+            self._hass.bus.async_fire(INCOMING_EVENT, payload)
+
+            text = normalized.get("text")
+            parsed = parse_command(text) if isinstance(text, str) else None
+            if parsed is not None:
+                self._hass.bus.async_fire(COMMAND_EVENT, {**payload, **parsed})
 
 
 @dataclass(slots=True)
