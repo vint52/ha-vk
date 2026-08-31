@@ -10,7 +10,7 @@ from homeassistant.core import Event, HomeAssistant, callback
 
 from custom_components.ha_vk.api import VkClient, VkClientConfig, VkLongPollServer
 from custom_components.ha_vk.const import INCOMING_EVENT
-from custom_components.ha_vk.receiver import VkIncomingMessageReceiver
+from custom_components.ha_vk.receiver import VkIncomingMessageReceiver, parse_command
 
 
 @pytest.mark.asyncio
@@ -150,3 +150,34 @@ async def test_receiver_triggers_reauth_on_auth_error(hass: HomeAssistant) -> No
         await asyncio.wait_for(receiver._task, timeout=1)
 
     reauth.assert_called_once_with(hass)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "/light kitchen off",
+            {"command": "light", "args": ["kitchen", "off"], "args_text": "kitchen off"},
+        ),
+        ("/ping", {"command": "ping", "args": [], "args_text": ""}),
+        (
+            "  /Light   Kitchen   OFF  ",
+            {"command": "light", "args": ["Kitchen", "OFF"], "args_text": "Kitchen   OFF"},
+        ),
+        (
+            "/say Привет мир",
+            {"command": "say", "args": ["Привет", "мир"], "args_text": "Привет мир"},
+        ),
+    ],
+)
+def test_parse_command_valid(text: str, expected: dict) -> None:
+    """Command texts should be parsed into command, args and args_text."""
+
+    assert parse_command(text) == expected
+
+
+@pytest.mark.parametrize("text", ["", "   ", "/", "/ foo", "hello", "light kitchen off"])
+def test_parse_command_not_a_command(text: str) -> None:
+    """Non-command texts should return None."""
+
+    assert parse_command(text) is None

@@ -17,6 +17,24 @@ from .const import (
     LONG_POLL_RETRY_DELAY,
 )
 
+COMMAND_PREFIX = "/"
+
+
+def parse_command(text: str) -> dict[str, object] | None:
+    """Parse a "/command arg1 arg2" message text, or return None."""
+
+    stripped = text.strip()
+    body = stripped.removeprefix(COMMAND_PREFIX)
+    if body == stripped or not body or body[0].isspace():
+        return None
+
+    tokens = body.split()
+    return {
+        "command": tokens[0].lower(),
+        "args": tokens[1:],
+        "args_text": body[len(tokens[0]) :].strip(),
+    }
+
 
 class VkIncomingMessageReceiver:
     """Read VK long poll updates and emit Home Assistant events."""
