@@ -19,7 +19,11 @@ Issue: #11 — «поддержка повторов отправки в слу�
 - Дефолт `DEFAULT_SEND_RETRIES = 3`; значение `0` отключает повторы
   (текущее поведение).
 - Поле в общей схеме config/options flow (`_build_schema`): NumberSelector,
-  `min=0`, `step=1`, mode BOX.
+  `min=0`, `max=10`, `step=1`, mode BOX — верхняя граница ограничивает
+  суммарное время блокировки notify-вызова.
+- Валидация в config flow (`_async_validate_input`) выполняется
+  с `send_retries=0`, чтобы форма быстро отвечала `cannot_connect`
+  вместо многоминутных повторов.
 - Сохраняется в options (`_entry_options`).
 - `VkClientConfig` получает поле `send_retries: int = DEFAULT_SEND_RETRIES`.
 - `build_client_config` парсит значение как целое `>= 0`
