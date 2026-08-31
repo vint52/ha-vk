@@ -449,3 +449,28 @@ async def test_send_message_uses_random_nonzero_random_id() -> None:
     assert first > 0
     assert second > 0
     assert first != second
+
+
+@pytest.mark.asyncio
+async def test_send_post_with_image_and_wall_token_attaches_photo() -> None:
+    """Wall posts should upload the photo when a wall token is configured."""
+
+    client = VkClient(
+        Mock(),
+        VkClientConfig(access_token="token", wall_access_token="wall", peer_id=1, group_id=42),
+    )
+    client._upload_wall_photo = AsyncMock(return_value="photo1_2")  # type: ignore[method-assign]
+    client._api_call = AsyncMock(return_value=321)  # type: ignore[method-assign]
+
+    result = await client.async_send_post("hello", "http://example.com/image.jpg")
+
+    assert result == {"response": 321}
+    client._upload_wall_photo.assert_awaited_once_with("http://example.com/image.jpg", "wall")
+    client._api_call.assert_awaited_once_with(
+        "wall.post",
+        token="wall",
+        owner_id=-42,
+        from_group=1,
+        message="hello",
+        attachments="photo1_2",
+    )
