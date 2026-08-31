@@ -162,7 +162,7 @@ def _entry_options(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_API_VERSION: str(user_input.get(CONF_API_VERSION, DEFAULT_API_VERSION)).strip()
         or DEFAULT_API_VERSION,
         CONF_REQUEST_TIMEOUT: float(user_input.get(CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT)),
-        CONF_SEND_RETRIES: int(user_input.get(CONF_SEND_RETRIES, DEFAULT_SEND_RETRIES)),
+        CONF_SEND_RETRIES: int(float(user_input.get(CONF_SEND_RETRIES, DEFAULT_SEND_RETRIES))),
     }
 
 

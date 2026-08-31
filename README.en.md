@@ -53,7 +53,7 @@ The setup flow asks for:
 - `VK wall access token`: optional user token for photos/videos on the community wall and for uploading videos on behalf of a user
 - `VK API version`: defaults to `5.131`
 - `Request timeout`: defaults to `30`
-- `Send retries on network errors`: extra attempts on transient network errors with increasing pauses (1s → 2s → 4s…, capped at 60s), defaults to `3`, range 0-10, `0` disables retries
+- `Send retries on network errors`: extra attempts on transient network errors with increasing pauses (1s → 2s → 4s…, capped at 60s), defaults to `3`, range 0-10, `0` disables retries; each network step retries independently, so high values can block the calling automation for many minutes
 
 Detailed instructions for obtaining all required VK tokens and IDs are available in [`TOKENS.en.md`](TOKENS.en.md).
 Ready-to-use automation snippets and usage ideas are collected in [`docs/examples.en.md`](docs/examples.en.md).

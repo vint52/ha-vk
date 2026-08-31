@@ -422,18 +422,25 @@ async def test_api_call_raises_network_error_after_exhausting_retries() -> None:
 
 
 @pytest.mark.asyncio
-async def test_api_call_does_not_retry_vk_api_errors() -> None:
-    """Logical VK errors (error payload) should not be retried."""
+@pytest.mark.parametrize(
+    ("error_code", "expected_error"),
+    [(100, VkApiError), (5, VkAuthError)],
+)
+async def test_api_call_does_not_retry_vk_api_errors(
+    error_code: int,
+    expected_error: type[VkApiError],
+) -> None:
+    """Logical VK errors (error payload, including auth) should not be retried."""
 
     session = Mock()
     session.post = Mock(
-        return_value=MockAsyncResponse({"error": {"error_code": 100, "error_msg": "Bad params"}})
+        return_value=MockAsyncResponse({"error": {"error_code": error_code, "error_msg": "boom"}})
     )
     client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=3))
 
     with (
         patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock) as sleep,
-        pytest.raises(VkApiError),
+        pytest.raises(expected_error),
     ):
         await client._api_call("messages.send", token="token")
 
@@ -786,8 +793,8 @@ async def test_upload_file_builds_fresh_form_per_attempt() -> None:
 
 
 @pytest.mark.asyncio
-async def test_api_call_keeps_random_id_across_retries() -> None:
-    """Retried messages.send attempts must reuse the same random_id for VK dedup."""
+async def test_send_message_keeps_random_id_across_retries() -> None:
+    """Retried sends must reuse one random_id so VK deduplicates instead of double-posting."""
 
     session = Mock()
     session.post = Mock(
@@ -796,11 +803,11 @@ async def test_api_call_keeps_random_id_across_retries() -> None:
     client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=3))
 
     with patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock):
-        await client._api_call("messages.send", token="token", random_id=12345, message="hi")
+        await client.async_send_message(message="hi")
 
     random_ids = {call.kwargs["data"]["random_id"] for call in session.post.call_args_list}
     assert session.post.call_count == 3
-    assert random_ids == {12345}
+    assert len(random_ids) == 1
 
 
 @pytest.mark.asyncio

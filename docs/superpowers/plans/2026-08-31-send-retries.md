@@ -1,5 +1,10 @@
 # Send Retries Implementation Plan
 
+> **Note:** во время выполнения план был дополнен по итогам код-ревью
+> (потолок бэкоффа `SEND_RETRY_MAX_DELAY`, `guid` для `wall.post`,
+> санитизация лога, `max=10` в селекторе, валидация с `send_retries=0`).
+> Актуальное описание — в спеке `docs/superpowers/specs/2026-08-31-send-retries-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Retry all network steps of VK message/post sending on transient network errors, with a configurable retry count (issue #11).

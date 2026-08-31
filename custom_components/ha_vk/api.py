@@ -669,7 +669,7 @@ class VkClient:
                 return await response.json(content_type=None)
 
         try:
-            payload = await self._with_retries("upload to VK", _request)
+            payload = await self._with_retries(f"upload {field_name} to VK", _request)
         except (TimeoutError, ClientError) as err:
             raise VkApiError("Failed to upload media to VK") from err
 
