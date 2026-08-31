@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -187,6 +188,62 @@ class HaVkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=_build_schema(user_input),
+            errors=errors,
+        )
+
+    async def async_step_reauth(
+        self,
+        entry_data: Mapping[str, Any],
+    ) -> config_entries.ConfigFlowResult:
+        """Start reauthentication after VK rejected the stored tokens."""
+
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Ask for fresh tokens and revalidate them."""
+
+        errors: dict[str, str] = {}
+        reauth_entry = self._get_reauth_entry()
+
+        if user_input is not None:
+            merged = {**reauth_entry.data, **reauth_entry.options, **user_input}
+            try:
+                await _async_validate_input(self.hass, merged)
+            except (VkApiError, VkConfigError) as err:
+                errors["base"] = _validation_error_key(err)
+            else:
+                return self.async_update_reload_and_abort(
+                    reauth_entry,
+                    data={
+                        **reauth_entry.data,
+                        CONF_VK_ACCESS_TOKEN: str(user_input[CONF_VK_ACCESS_TOKEN]).strip(),
+                    },
+                    options={
+                        **reauth_entry.options,
+                        CONF_VK_WALL_ACCESS_TOKEN: str(
+                            user_input.get(CONF_VK_WALL_ACCESS_TOKEN, "")
+                        ).strip(),
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_VK_ACCESS_TOKEN): selector.TextSelector(
+                        selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
+                    ),
+                    vol.Optional(
+                        CONF_VK_WALL_ACCESS_TOKEN,
+                        default=reauth_entry.options.get(CONF_VK_WALL_ACCESS_TOKEN, ""),
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
+                    ),
+                }
+            ),
             errors=errors,
         )
 

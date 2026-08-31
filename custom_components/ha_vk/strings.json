@@ -14,6 +14,14 @@
           "vk_api_version": "VK API version",
           "request_timeout": "Request timeout"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate ha-vk",
+        "description": "VK rejected the stored tokens. Enter fresh tokens to continue.",
+        "data": {
+          "vk_access_token": "VK access token",
+          "vk_wall_access_token": "VK wall access token"
+        }
       }
     },
     "error": {
@@ -22,6 +30,10 @@
       "invalid_auth": "Authentication failed",
       "invalid_input": "Invalid configuration value",
       "vk_error": "VK rejected the configuration"
+    },
+    "abort": {
+      "already_configured": "A ha-vk entry with the same peer and group is already configured",
+      "reauth_successful": "Re-authentication was successful"
     }
   },
   "options": {

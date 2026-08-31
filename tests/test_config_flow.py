@@ -238,3 +238,48 @@ def test_validation_error_key_maps_typed_exceptions() -> None:
     assert _validation_error_key(VkAuthError("boom", code=5)) == "invalid_auth"
     assert _validation_error_key(VkNetworkError("boom")) == "cannot_connect"
     assert _validation_error_key(VkApiError("boom")) == "vk_error"
+
+
+async def test_reauth_flow_updates_tokens(hass: HomeAssistant) -> None:
+    """Reauth should revalidate and persist fresh tokens without recreating the entry."""
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="vk_alerts",
+        unique_id="peer:2000000123|group:42",
+        data={
+            CONF_NAME: "vk_alerts",
+            CONF_VK_ACCESS_TOKEN: "stale-token",
+            CONF_PEER_ID: "2000000123",
+            CONF_GROUP_ID: "42",
+        },
+        options={
+            CONF_ENABLE_INCOMING_MESSAGES: False,
+            CONF_VK_WALL_ACCESS_TOKEN: "stale-wall",
+            CONF_API_VERSION: DEFAULT_API_VERSION,
+            CONF_REQUEST_TIMEOUT: DEFAULT_REQUEST_TIMEOUT,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    with patch(
+        "custom_components.ha_vk.config_flow._async_validate_input",
+        return_value=None,
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_VK_ACCESS_TOKEN: "fresh-token",
+                CONF_VK_WALL_ACCESS_TOKEN: "fresh-wall",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_VK_ACCESS_TOKEN] == "fresh-token"
+    assert entry.options[CONF_VK_WALL_ACCESS_TOKEN] == "fresh-wall"
