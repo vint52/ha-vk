@@ -14,6 +14,7 @@ from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout, F
 from .const import (
     DEFAULT_API_VERSION,
     DEFAULT_REQUEST_TIMEOUT,
+    DEFAULT_SEND_RETRIES,
     SEND_TYPE_DOCUMENT,
     SEND_TYPE_VIDEO,
 )
@@ -81,6 +82,7 @@ class VkClientConfig:
     group_id: int | None = None
     api_version: str = DEFAULT_API_VERSION
     request_timeout: float = DEFAULT_REQUEST_TIMEOUT
+    send_retries: int = DEFAULT_SEND_RETRIES
 
 
 @dataclass(slots=True, frozen=True)
@@ -119,6 +121,14 @@ def build_client_config(data: dict[str, Any]) -> VkClientConfig:
         "Request timeout",
     )
 
+    send_retries_raw = data.get("send_retries", DEFAULT_SEND_RETRIES)
+    try:
+        send_retries = int(float(send_retries_raw))
+    except (TypeError, ValueError) as err:
+        raise VkConfigError("Send retries must be an integer") from err
+    if send_retries < 0:
+        raise VkConfigError("Send retries must be zero or greater")
+
     return VkClientConfig(
         access_token=access_token,
         peer_id=peer_id,
@@ -127,6 +137,7 @@ def build_client_config(data: dict[str, Any]) -> VkClientConfig:
         group_id=group_id,
         api_version=api_version,
         request_timeout=request_timeout,
+        send_retries=send_retries,
     )
 
 

@@ -12,6 +12,7 @@ from custom_components.ha_vk.api import (
     VkAuthError,
     VkClient,
     VkClientConfig,
+    VkConfigError,
     VkLongPollError,
     VkLongPollServer,
     VkNetworkError,
@@ -474,3 +475,42 @@ async def test_send_post_with_image_and_wall_token_attaches_photo() -> None:
         message="hello",
         attachments="photo1_2",
     )
+
+
+def test_build_client_config_parses_send_retries() -> None:
+    """send_retries should be parsed as a non-negative integer."""
+
+    config = build_client_config(
+        {
+            "vk_access_token": "token",
+            "vk_peer_id": "1",
+            "send_retries": "5",
+        }
+    )
+
+    assert config.send_retries == 5
+
+
+def test_build_client_config_defaults_send_retries() -> None:
+    """send_retries should default to 3 when absent."""
+
+    config = build_client_config(
+        {
+            "vk_access_token": "token",
+            "vk_peer_id": "1",
+        }
+    )
+
+    assert config.send_retries == 3
+
+
+def test_build_client_config_rejects_invalid_send_retries() -> None:
+    """Negative or non-numeric send_retries should raise VkConfigError."""
+
+    base = {"vk_access_token": "token", "vk_peer_id": "1"}
+
+    with pytest.raises(VkConfigError, match="Send retries"):
+        build_client_config({**base, "send_retries": -1})
+
+    with pytest.raises(VkConfigError, match="Send retries"):
+        build_client_config({**base, "send_retries": "abc"})
