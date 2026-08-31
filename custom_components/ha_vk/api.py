@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import mimetypes
+import secrets
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -385,7 +386,7 @@ class VkClient:
 
         payload = {
             "peer_id": self._config.peer_id,
-            "random_id": 0,
+            "random_id": _random_id(),
             "message": format_notify_message(message or "", title),
         }
         response = await self._api_call("messages.send", token=self._config.access_token, **payload)
@@ -467,7 +468,7 @@ class VkClient:
             "messages.send",
             token=self._config.access_token,
             peer_id=self._config.peer_id,
-            random_id=0,
+            random_id=_random_id(),
             message=message,
             attachment=attachment,
         )
@@ -684,6 +685,12 @@ class VkClient:
             raise VkApiError(f"{method}: missing response payload")
 
         return data["response"]
+
+
+def _random_id() -> int:
+    """Generate a positive random_id so VK can deduplicate retried sends."""
+
+    return secrets.randbelow(2**31 - 1) + 1
 
 
 def _filename_from_url(source_url: str, content_type: str) -> str:

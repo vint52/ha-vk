@@ -432,3 +432,20 @@ async def test_send_video_falls_back_to_document_on_group_auth_error() -> None:
 
     assert result == {"response": 1}
     client._save_video_document_attachment.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_send_message_uses_random_nonzero_random_id() -> None:
+    """messages.send should carry a random_id so VK can deduplicate retries."""
+
+    client = VkClient(Mock(), VkClientConfig(access_token="token", peer_id=1))
+    client._api_call = AsyncMock(return_value=1)  # type: ignore[method-assign]
+
+    await client.async_send_message(message="one")
+    await client.async_send_message(message="two")
+
+    first = client._api_call.await_args_list[0].kwargs["random_id"]
+    second = client._api_call.await_args_list[1].kwargs["random_id"]
+    assert first > 0
+    assert second > 0
+    assert first != second
