@@ -472,6 +472,7 @@ class VkClient:
             token=token,
             owner_id=-self._config.group_id,
             from_group=1,
+            guid=_random_id(),
             message=message,
             attachments=attachments,
         )
@@ -623,8 +624,10 @@ class VkClient:
                 downloaded = await response.read()
                 return downloaded, response.headers.get("Content-Type", "").split(";")[0].strip()
 
+        parsed_url = urlparse(source_url)
+        label = f"download {parsed_url.netloc}{parsed_url.path}"
         try:
-            content, content_type = await self._with_retries(f"download {source_url}", _request)
+            content, content_type = await self._with_retries(label, _request)
         except (TimeoutError, ClientError) as err:
             raise VkApiError("Failed to download media file") from err
 
@@ -678,6 +681,7 @@ class VkClient:
     async def _with_retries(self, label: str, request: Callable[[], Awaitable[Any]]) -> Any:
         """Run a network request, retrying transport failures with backoff."""
 
+        # max(1, ...) tolerates hand-built configs; build_client_config already rejects negatives.
         attempts = max(1, self._config.send_retries + 1)
         for attempt in range(attempts):
             try:
@@ -685,6 +689,8 @@ class VkClient:
             except (TimeoutError, ClientError):
                 if attempt + 1 >= attempts:
                     raise
+                # The exponent clamp guards 2**attempt against absurd retry counts;
+                # SEND_RETRY_MAX_DELAY binds far earlier for sane configs.
                 delay = min(SEND_RETRY_BACKOFF_BASE * 2 ** min(attempt, 16), SEND_RETRY_MAX_DELAY)
                 LOGGER.warning(
                     "%s: network error, retry %d/%d in %.0fs",

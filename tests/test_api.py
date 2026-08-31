@@ -199,14 +199,14 @@ async def test_send_post_with_image_without_wall_token_skips_attachment() -> Non
 
     assert result == {"response": 123}
     client._upload_wall_photo.assert_not_awaited()
-    client._api_call.assert_awaited_once_with(
-        "wall.post",
-        token="token",
-        owner_id=-42,
-        from_group=1,
-        message="hello",
-        attachments=None,
-    )
+    call = client._api_call.await_args
+    assert call.args == ("wall.post",)
+    assert call.kwargs["token"] == "token"
+    assert call.kwargs["owner_id"] == -42
+    assert call.kwargs["from_group"] == 1
+    assert call.kwargs["message"] == "hello"
+    assert call.kwargs["attachments"] is None
+    assert call.kwargs["guid"] > 0
 
 
 @pytest.mark.asyncio
@@ -569,14 +569,94 @@ async def test_send_post_with_image_and_wall_token_attaches_photo() -> None:
 
     assert result == {"response": 321}
     client._upload_wall_photo.assert_awaited_once_with("http://example.com/image.jpg", "wall")
-    client._api_call.assert_awaited_once_with(
-        "wall.post",
-        token="wall",
-        owner_id=-42,
-        from_group=1,
-        message="hello",
-        attachments="photo1_2",
+    call = client._api_call.await_args
+    assert call.args == ("wall.post",)
+    assert call.kwargs["token"] == "wall"
+    assert call.kwargs["owner_id"] == -42
+    assert call.kwargs["from_group"] == 1
+    assert call.kwargs["message"] == "hello"
+    assert call.kwargs["attachments"] == "photo1_2"
+    assert call.kwargs["guid"] > 0
+
+
+@pytest.mark.asyncio
+async def test_send_post_uses_fresh_guid_per_call() -> None:
+    """wall.post should carry a per-call guid so VK can deduplicate retries."""
+
+    client = VkClient(
+        Mock(),
+        VkClientConfig(access_token="token", peer_id=1, group_id=42),
     )
+    client._api_call = AsyncMock(return_value=1)  # type: ignore[method-assign]
+
+    await client.async_send_post("one")
+    await client.async_send_post("two")
+
+    first = client._api_call.await_args_list[0].kwargs["guid"]
+    second = client._api_call.await_args_list[1].kwargs["guid"]
+    assert first > 0
+    assert second > 0
+    assert first != second
+
+
+@pytest.mark.asyncio
+async def test_download_file_raises_after_exhausting_retries() -> None:
+    """Download retries should give up with VkApiError after the limit."""
+
+    session = Mock()
+    session.get = Mock(side_effect=ClientError())
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=2))
+
+    with (
+        patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock),
+        pytest.raises(VkApiError, match="Failed to download media file"),
+    ):
+        await client._download_file("http://example.com/pic.jpg", "image/")
+
+    assert session.get.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_upload_file_raises_after_exhausting_retries() -> None:
+    """Upload retries should give up with VkApiError after the limit."""
+
+    session = Mock()
+    session.post = Mock(side_effect=TimeoutError())
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=2))
+
+    with (
+        patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock),
+        pytest.raises(VkApiError, match="Failed to upload media to VK"),
+    ):
+        await client._upload_file(
+            "http://upload.example.com",
+            field_name="photo",
+            filename="pic.jpg",
+            content=b"img",
+            content_type="image/jpeg",
+        )
+
+    assert session.post.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_download_retry_log_label_omits_query(caplog: pytest.LogCaptureFixture) -> None:
+    """Retry warnings must not leak URL query strings (may carry signed tokens)."""
+
+    session = Mock()
+    session.get = Mock(
+        side_effect=[
+            ClientError(),
+            MockAsyncResponse(content_type="image/jpeg", body=b"img"),
+        ]
+    )
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=1))
+
+    with patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock):
+        await client._download_file("http://example.com/pic.jpg?authSig=secret", "image/")
+
+    assert "authSig" not in caplog.text
+    assert "example.com/pic.jpg" in caplog.text
 
 
 def test_build_client_config_parses_send_retries() -> None:
