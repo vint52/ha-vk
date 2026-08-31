@@ -9,9 +9,17 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import selector
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import VkApiError, VkClient, VkConfigError, build_client_config
+from .api import (
+    VkApiError,
+    VkAuthError,
+    VkClient,
+    VkConfigError,
+    VkLongPollError,
+    VkNetworkError,
+    build_client_config,
+)
 from .const import (
     CONF_API_VERSION,
     CONF_ENABLE_INCOMING_MESSAGES,
@@ -31,7 +39,7 @@ async def _async_validate_input(hass: HomeAssistant, user_input: dict[str, Any])
     """Validate the provided config against VK."""
 
     client = VkClient(
-        async_create_clientsession(hass),
+        async_get_clientsession(hass),
         build_client_config(user_input),
     )
     await client.async_validate_config()
@@ -86,14 +94,15 @@ def _build_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
 def _validation_error_key(err: VkApiError | VkConfigError) -> str:
     """Map a validation exception to a strings.json error key."""
 
-    lower = str(err).lower()
     if isinstance(err, VkConfigError):
-        return "incoming_not_available" if "incoming messages" in lower else "invalid_input"
-    if "groups.getlongpollserver" in lower or "vk long poll" in lower:
+        if "incoming messages" in str(err).lower():
+            return "incoming_not_available"
+        return "invalid_input"
+    if isinstance(err, VkLongPollError):
         return "incoming_not_available"
-    if "invalid access token" in lower or "access denied" in lower:
+    if isinstance(err, VkAuthError):
         return "invalid_auth"
-    if "network error" in lower:
+    if isinstance(err, VkNetworkError):
         return "cannot_connect"
     return "vk_error"
 
