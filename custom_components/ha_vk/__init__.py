@@ -38,7 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     runtime = HaVkEntryRuntime(client=client)
     if client.supports_incoming_messages:
-        runtime.receiver = VkIncomingMessageReceiver(hass, entry.entry_id, client)
+        runtime.receiver = VkIncomingMessageReceiver(hass, entry, client)
         await runtime.receiver.async_start()
 
     hass.data[DOMAIN][entry.entry_id] = runtime
