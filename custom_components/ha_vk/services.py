@@ -6,15 +6,15 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers import config_validation as cv
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
 
-from .api import VkApiError, VkConfigError
+from .api import VkApiError, VkClient, VkConfigError
 from .const import (
     ATTR_IMAGE,
     ATTR_MESSAGE,
-    ATTR_TYPE,
     ATTR_TITLE,
+    ATTR_TYPE,
     ATTR_VIDEO,
     CONF_ENTRY_ID,
     DOMAIN,
@@ -23,6 +23,7 @@ from .const import (
     SERVICE_SEND_MESSAGE,
     SERVICE_SEND_POST,
 )
+from .receiver import HaVkEntryRuntime
 
 MESSAGE_SERVICE_SCHEMA = vol.All(
     vol.Schema(
@@ -103,23 +104,22 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
             hass.services.async_remove(DOMAIN, service_name)
 
 
-def _resolve_client(hass: HomeAssistant, service_data: dict[str, Any]):
+def _resolve_client(hass: HomeAssistant, service_data: dict[str, Any]) -> VkClient:
     """Resolve the target VK client for a service call."""
 
-    clients = hass.data.get(DOMAIN, {})
-    if not clients:
+    runtimes: dict[str, HaVkEntryRuntime] = hass.data.get(DOMAIN, {})
+    if not runtimes:
         raise ServiceValidationError("ha-vk is not configured")
 
     entry_id = service_data.get(CONF_ENTRY_ID)
     if entry_id:
-        client_or_runtime = clients.get(entry_id)
-        if client_or_runtime is None:
+        runtime = runtimes.get(entry_id)
+        if runtime is None:
             raise ServiceValidationError(f"Unknown ha-vk entry_id: {entry_id}")
-        return getattr(client_or_runtime, "client", client_or_runtime)
+        return runtime.client
 
-    if len(clients) == 1:
-        client_or_runtime = next(iter(clients.values()))
-        return getattr(client_or_runtime, "client", client_or_runtime)
+    if len(runtimes) == 1:
+        return next(iter(runtimes.values())).client
 
     raise ServiceValidationError(
         "Multiple ha-vk entries are configured; pass entry_id explicitly"

@@ -37,8 +37,8 @@ async def _async_validate_input(hass: HomeAssistant, user_input: dict[str, Any])
     await client.async_validate_config()
 
 
-def _build_user_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
-    """Build the initial setup form schema."""
+def _build_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
+    """Build the form schema shared by the setup and options flows."""
 
     values = user_input or {}
     return vol.Schema(
@@ -83,51 +83,19 @@ def _build_user_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
     )
 
 
-def _build_options_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
-    """Build the options flow schema."""
+def _validation_error_key(err: VkApiError | VkConfigError) -> str:
+    """Map a validation exception to a strings.json error key."""
 
-    values = user_input or {}
-    return vol.Schema(
-        {
-            vol.Required(CONF_NAME, default=values.get(CONF_NAME, DEFAULT_NAME)): selector.TextSelector(
-                selector.TextSelectorConfig(),
-            ),
-            vol.Required(CONF_VK_ACCESS_TOKEN, default=values.get(CONF_VK_ACCESS_TOKEN, "")): selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
-            ),
-            vol.Required(CONF_PEER_ID, default=values.get(CONF_PEER_ID, "")): selector.TextSelector(
-                selector.TextSelectorConfig(),
-            ),
-            vol.Optional(
-                CONF_GROUP_ID,
-                default=values.get(CONF_GROUP_ID, ""),
-            ): selector.TextSelector(selector.TextSelectorConfig()),
-            vol.Optional(
-                CONF_ENABLE_INCOMING_MESSAGES,
-                default=values.get(CONF_ENABLE_INCOMING_MESSAGES, False),
-            ): selector.BooleanSelector(),
-            vol.Optional(
-                CONF_VK_WALL_ACCESS_TOKEN,
-                default=values.get(CONF_VK_WALL_ACCESS_TOKEN, ""),
-            ): selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
-            ),
-            vol.Required(
-                CONF_API_VERSION,
-                default=values.get(CONF_API_VERSION, DEFAULT_API_VERSION),
-            ): selector.TextSelector(selector.TextSelectorConfig()),
-            vol.Required(
-                CONF_REQUEST_TIMEOUT,
-                default=values.get(CONF_REQUEST_TIMEOUT, DEFAULT_REQUEST_TIMEOUT),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=1,
-                    step=1,
-                    mode=selector.NumberSelectorMode.BOX,
-                )
-            ),
-        }
-    )
+    lower = str(err).lower()
+    if isinstance(err, VkConfigError):
+        return "incoming_not_available" if "incoming messages" in lower else "invalid_input"
+    if "groups.getlongpollserver" in lower or "vk long poll" in lower:
+        return "incoming_not_available"
+    if "invalid access token" in lower or "access denied" in lower:
+        return "invalid_auth"
+    if "network error" in lower:
+        return "cannot_connect"
+    return "vk_error"
 
 
 def _entry_unique_id(user_input: dict[str, Any]) -> str:
@@ -180,7 +148,7 @@ class HaVkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     @staticmethod
-    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> "HaVkOptionsFlow":
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> HaVkOptionsFlow:
         """Return the options flow handler."""
 
         return HaVkOptionsFlow()
@@ -196,21 +164,8 @@ class HaVkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 await _async_validate_input(self.hass, user_input)
-            except VkConfigError as err:
-                if "incoming messages" in str(err).lower():
-                    errors["base"] = "incoming_not_available"
-                else:
-                    errors["base"] = "invalid_input"
-            except VkApiError as err:
-                lower = str(err).lower()
-                if "groups.getlongpollserver" in lower or "vk long poll" in lower:
-                    errors["base"] = "incoming_not_available"
-                elif "invalid access token" in lower or "access denied" in lower:
-                    errors["base"] = "invalid_auth"
-                elif "network error" in lower:
-                    errors["base"] = "cannot_connect"
-                else:
-                    errors["base"] = "vk_error"
+            except (VkApiError, VkConfigError) as err:
+                errors["base"] = _validation_error_key(err)
             else:
                 await self.async_set_unique_id(_entry_unique_id(user_input))
                 self._abort_if_unique_id_configured()
@@ -222,7 +177,7 @@ class HaVkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_build_user_schema(user_input),
+            data_schema=_build_schema(user_input),
             errors=errors,
         )
 
@@ -251,21 +206,8 @@ class HaVkOptionsFlow(config_entries.OptionsFlow):
             else:
                 try:
                     await _async_validate_input(self.hass, merged)
-                except VkConfigError as err:
-                    if "incoming messages" in str(err).lower():
-                        errors["base"] = "incoming_not_available"
-                    else:
-                        errors["base"] = "invalid_input"
-                except VkApiError as err:
-                    lower = str(err).lower()
-                    if "groups.getlongpollserver" in lower or "vk long poll" in lower:
-                        errors["base"] = "incoming_not_available"
-                    elif "invalid access token" in lower or "access denied" in lower:
-                        errors["base"] = "invalid_auth"
-                    elif "network error" in lower:
-                        errors["base"] = "cannot_connect"
-                    else:
-                        errors["base"] = "vk_error"
+                except (VkApiError, VkConfigError) as err:
+                    errors["base"] = _validation_error_key(err)
                 else:
                     new_name = str(merged[CONF_NAME]).strip() or DEFAULT_NAME
                     self.hass.config_entries.async_update_entry(
@@ -280,6 +222,6 @@ class HaVkOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=_build_options_schema(current),
+            data_schema=_build_schema(current),
             errors=errors,
         )
