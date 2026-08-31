@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 import voluptuous as vol
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ha_vk.const import DOMAIN
 from custom_components.ha_vk.receiver import HaVkEntryRuntime
@@ -37,8 +39,10 @@ async def test_send_message_service_passes_media_fields_to_client(hass: HomeAssi
 
     client = Mock()
     client.async_send_message = AsyncMock()
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["entry-1"] = HaVkEntryRuntime(client=client)
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="entry-1")
+    entry.add_to_hass(hass)
+    entry.runtime_data = HaVkEntryRuntime(client=client)
+    entry.mock_state(hass, ConfigEntryState.LOADED)
 
     await async_register_services(hass)
 

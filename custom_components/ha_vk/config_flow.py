@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -9,9 +10,17 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import selector
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import VkApiError, VkClient, VkConfigError, build_client_config
+from .api import (
+    VkApiError,
+    VkAuthError,
+    VkClient,
+    VkConfigError,
+    VkLongPollError,
+    VkNetworkError,
+    build_client_config,
+)
 from .const import (
     CONF_API_VERSION,
     CONF_ENABLE_INCOMING_MESSAGES,
@@ -31,7 +40,7 @@ async def _async_validate_input(hass: HomeAssistant, user_input: dict[str, Any])
     """Validate the provided config against VK."""
 
     client = VkClient(
-        async_create_clientsession(hass),
+        async_get_clientsession(hass),
         build_client_config(user_input),
     )
     await client.async_validate_config()
@@ -86,14 +95,15 @@ def _build_schema(user_input: dict[str, Any] | None = None) -> vol.Schema:
 def _validation_error_key(err: VkApiError | VkConfigError) -> str:
     """Map a validation exception to a strings.json error key."""
 
-    lower = str(err).lower()
     if isinstance(err, VkConfigError):
-        return "incoming_not_available" if "incoming messages" in lower else "invalid_input"
-    if "groups.getlongpollserver" in lower or "vk long poll" in lower:
+        if "incoming messages" in str(err).lower():
+            return "incoming_not_available"
+        return "invalid_input"
+    if isinstance(err, VkLongPollError):
         return "incoming_not_available"
-    if "invalid access token" in lower or "access denied" in lower:
+    if isinstance(err, VkAuthError):
         return "invalid_auth"
-    if "network error" in lower:
+    if isinstance(err, VkNetworkError):
         return "cannot_connect"
     return "vk_error"
 
@@ -178,6 +188,62 @@ class HaVkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=_build_schema(user_input),
+            errors=errors,
+        )
+
+    async def async_step_reauth(
+        self,
+        entry_data: Mapping[str, Any],
+    ) -> config_entries.ConfigFlowResult:
+        """Start reauthentication after VK rejected the stored tokens."""
+
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Ask for fresh tokens and revalidate them."""
+
+        errors: dict[str, str] = {}
+        reauth_entry = self._get_reauth_entry()
+
+        if user_input is not None:
+            merged = {**reauth_entry.data, **reauth_entry.options, **user_input}
+            try:
+                await _async_validate_input(self.hass, merged)
+            except (VkApiError, VkConfigError) as err:
+                errors["base"] = _validation_error_key(err)
+            else:
+                return self.async_update_reload_and_abort(
+                    reauth_entry,
+                    data={
+                        **reauth_entry.data,
+                        CONF_VK_ACCESS_TOKEN: str(user_input[CONF_VK_ACCESS_TOKEN]).strip(),
+                    },
+                    options={
+                        **reauth_entry.options,
+                        CONF_VK_WALL_ACCESS_TOKEN: str(
+                            user_input.get(CONF_VK_WALL_ACCESS_TOKEN, "")
+                        ).strip(),
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_VK_ACCESS_TOKEN): selector.TextSelector(
+                        selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
+                    ),
+                    vol.Optional(
+                        CONF_VK_WALL_ACCESS_TOKEN,
+                        default=reauth_entry.options.get(CONF_VK_WALL_ACCESS_TOKEN, ""),
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
+                    ),
+                }
+            ),
             errors=errors,
         )
 
