@@ -10,12 +10,31 @@ from homeassistant.core import HomeAssistant
 
 from .api import VkApiError, VkClient, VkLongPollServer, is_auth_error
 from .const import (
+    COMMAND_EVENT,
     DOMAIN,
     INCOMING_EVENT,
     LOGGER,
     LONG_POLL_MAX_RETRY_DELAY,
     LONG_POLL_RETRY_DELAY,
 )
+
+COMMAND_PREFIX = "/"
+
+
+def parse_command(text: str) -> dict[str, object] | None:
+    """Parse a "/command arg1 arg2" message text, or return None."""
+
+    stripped = text.strip()
+    body = stripped.removeprefix(COMMAND_PREFIX)
+    if body == stripped or not body or body[0].isspace():
+        return None
+
+    tokens = body.split()
+    return {
+        "command": tokens[0].lower(),
+        "args": tokens[1:],
+        "args_text": body[len(tokens[0]) :].strip(),
+    }
 
 
 class VkIncomingMessageReceiver:
@@ -97,10 +116,13 @@ class VkIncomingMessageReceiver:
             if normalized is None:
                 continue
 
-            self._hass.bus.async_fire(
-                INCOMING_EVENT,
-                {"entry_id": self._entry.entry_id, **normalized},
-            )
+            payload = {"entry_id": self._entry.entry_id, **normalized}
+            self._hass.bus.async_fire(INCOMING_EVENT, payload)
+
+            text = normalized.get("text")
+            parsed = parse_command(text) if isinstance(text, str) else None
+            if parsed is not None:
+                self._hass.bus.async_fire(COMMAND_EVENT, {**payload, **parsed})
 
 
 @dataclass(slots=True)
