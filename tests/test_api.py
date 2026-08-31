@@ -5,15 +5,20 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from aiohttp import ClientError
 
 from custom_components.ha_vk.api import (
     VkApiError,
+    VkAuthError,
     VkClient,
     VkClientConfig,
+    VkLongPollError,
     VkLongPollServer,
+    VkNetworkError,
     build_client_config,
     format_notify_message,
     format_service_message,
+    is_auth_error,
 )
 
 
@@ -158,11 +163,11 @@ async def test_send_video_with_invalid_wall_token_raises_clear_error() -> None:
     )
     client._download_file = AsyncMock(return_value=(b"video", "video/mp4", "clip.mp4"))  # type: ignore[method-assign]
     client._save_video_attachment = AsyncMock(  # type: ignore[method-assign]
-        side_effect=VkApiError("video.save: invalid access token")
+        side_effect=VkAuthError("video.save: invalid access token", code=5)
     )
     client._save_video_document_attachment = AsyncMock()  # type: ignore[method-assign]
 
-    with pytest.raises(VkApiError, match="VK wall access token is invalid"):
+    with pytest.raises(VkAuthError, match="VK wall access token is invalid"):
         await client.async_send_video("http://example.com/clip.mp4", "video")
 
     client._save_video_document_attachment.assert_not_awaited()
@@ -320,3 +325,110 @@ def test_normalize_incoming_message_event_filters_to_configured_peer() -> None:
         )
         is None
     )
+
+
+@pytest.mark.asyncio
+async def test_api_call_raises_typed_auth_error_with_code() -> None:
+    """VK auth error codes should raise VkAuthError carrying the code."""
+
+    session = Mock()
+    session.post = Mock(
+        return_value=MockAsyncResponse(
+            {"error": {"error_code": 5, "error_msg": "User authorization failed."}}
+        )
+    )
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1))
+
+    with pytest.raises(VkAuthError) as excinfo:
+        await client._api_call("users.get", token="token")
+
+    assert excinfo.value.code == 5
+
+
+@pytest.mark.asyncio
+async def test_api_call_raises_generic_error_with_code() -> None:
+    """Non-auth VK errors should stay VkApiError but keep the code."""
+
+    session = Mock()
+    session.post = Mock(
+        return_value=MockAsyncResponse({"error": {"error_code": 100, "error_msg": "Bad params"}})
+    )
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1))
+
+    with pytest.raises(VkApiError) as excinfo:
+        await client._api_call("users.get", token="token")
+
+    assert not isinstance(excinfo.value, VkAuthError)
+    assert excinfo.value.code == 100
+
+
+@pytest.mark.asyncio
+async def test_api_call_raises_network_error() -> None:
+    """Transport failures should raise VkNetworkError."""
+
+    session = Mock()
+    session.post = Mock(side_effect=ClientError())
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1))
+
+    with pytest.raises(VkNetworkError):
+        await client._api_call("users.get", token="token")
+
+
+@pytest.mark.asyncio
+async def test_get_long_poll_server_wraps_errors_as_long_poll_error() -> None:
+    """Long poll server failures should surface as VkLongPollError with the code."""
+
+    client = VkClient(Mock(), VkClientConfig(access_token="token", peer_id=1, group_id=42))
+    client._api_call = AsyncMock(  # type: ignore[method-assign]
+        side_effect=VkAuthError("groups.getLongPollServer: access denied", code=15)
+    )
+
+    with pytest.raises(VkLongPollError) as excinfo:
+        await client.async_get_long_poll_server()
+
+    assert excinfo.value.code == 15
+    assert is_auth_error(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_check_long_poll_network_error_is_long_poll_error() -> None:
+    """Long poll transport failures should raise VkLongPollError."""
+
+    session = Mock()
+    session.get = Mock(side_effect=ClientError())
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, group_id=42))
+
+    with pytest.raises(VkLongPollError):
+        await client.async_check_long_poll(
+            VkLongPollServer(server="https://lp.example.com", key="secret", ts="100")
+        )
+
+
+def test_is_auth_error_matches_types_and_codes() -> None:
+    """is_auth_error should match VkAuthError instances and wrapped auth codes."""
+
+    assert is_auth_error(VkAuthError("bad token", code=5))
+    assert is_auth_error(VkLongPollError("wrapped", code=27))
+    assert not is_auth_error(VkApiError("other", code=100))
+    assert not is_auth_error(VkApiError("no code"))
+
+
+@pytest.mark.asyncio
+async def test_send_video_falls_back_to_document_on_group_auth_error() -> None:
+    """Group authorization failures should fall back to document upload."""
+
+    client = VkClient(
+        Mock(),
+        VkClientConfig(access_token="token", wall_access_token="wall", peer_id=1),
+    )
+    client._download_file = AsyncMock(return_value=(b"video", "video/mp4", "clip.mp4"))  # type: ignore[method-assign]
+    client._save_video_attachment = AsyncMock(  # type: ignore[method-assign]
+        side_effect=VkAuthError("video.save: group authorization failed", code=27)
+    )
+    client._save_video_document_attachment = AsyncMock(return_value="doc1_2")  # type: ignore[method-assign]
+    client._send_attachment = AsyncMock(return_value={"response": 1})  # type: ignore[method-assign]
+
+    result = await client.async_send_video("http://example.com/clip.mp4", "video")
+
+    assert result == {"response": 1}
+    client._save_video_document_attachment.assert_awaited_once()

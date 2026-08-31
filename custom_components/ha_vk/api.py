@@ -23,12 +23,50 @@ VK_LONG_POLL_VERSION = 10
 VK_LONG_POLL_WAIT = 25
 
 
+VK_ERROR_AUTH_FAILED = 5
+VK_ERROR_ACCESS_DENIED = 15
+VK_ERROR_GROUP_AUTH_FAILED = 27
+VK_ERROR_APP_AUTH_FAILED = 28
+VK_AUTH_ERROR_CODES = frozenset(
+    {
+        VK_ERROR_AUTH_FAILED,
+        VK_ERROR_ACCESS_DENIED,
+        VK_ERROR_GROUP_AUTH_FAILED,
+        VK_ERROR_APP_AUTH_FAILED,
+    }
+)
+
+
 class VkApiError(RuntimeError):
     """Raised when VK API returns an error."""
+
+    def __init__(self, message: str, code: int | None = None) -> None:
+        """Initialize the error with an optional VK error code."""
+
+        super().__init__(message)
+        self.code = code
+
+
+class VkAuthError(VkApiError):
+    """Raised when VK rejects the used access token."""
+
+
+class VkNetworkError(VkApiError):
+    """Raised when VK is unreachable or the request times out."""
+
+
+class VkLongPollError(VkApiError):
+    """Raised when the long poll transport fails."""
 
 
 class VkConfigError(RuntimeError):
     """Raised when integration configuration is invalid."""
+
+
+def is_auth_error(err: VkApiError) -> bool:
+    """Return True when the error indicates an invalid or expired token."""
+
+    return isinstance(err, VkAuthError) or err.code in VK_AUTH_ERROR_CODES
 
 
 @dataclass(slots=True, frozen=True)
@@ -205,23 +243,28 @@ class VkClient:
         if self._config.group_id is None:
             raise VkConfigError("VK group ID is required for incoming messages")
 
-        response = await self._api_call(
-            "groups.getLongPollServer",
-            token=self._config.access_token,
-            group_id=self._config.group_id,
-        )
+        try:
+            response = await self._api_call(
+                "groups.getLongPollServer",
+                token=self._config.access_token,
+                group_id=self._config.group_id,
+            )
+        except VkLongPollError:
+            raise
+        except VkApiError as err:
+            raise VkLongPollError(str(err), code=err.code) from err
         if not isinstance(response, dict):
-            raise VkApiError("groups.getLongPollServer: invalid response from VK")
+            raise VkLongPollError("groups.getLongPollServer: invalid response from VK")
 
         try:
             server = str(response["server"]).strip()
             key = str(response["key"]).strip()
             ts = str(response["ts"]).strip()
         except KeyError as err:
-            raise VkApiError("groups.getLongPollServer: missing long poll data") from err
+            raise VkLongPollError("groups.getLongPollServer: missing long poll data") from err
 
         if not server or not key or not ts:
-            raise VkApiError("groups.getLongPollServer: invalid long poll data")
+            raise VkLongPollError("groups.getLongPollServer: invalid long poll data")
 
         return VkLongPollServer(server=server, key=key, ts=ts)
 
@@ -246,36 +289,36 @@ class VkClient:
                 timeout=timeout,
             ) as response:
                 if response.status >= 400:
-                    raise VkApiError(f"VK long poll: {await _summarize_response(response)}")
+                    raise VkLongPollError(f"VK long poll: {await _summarize_response(response)}")
                 payload = await response.json(content_type=None)
         except (TimeoutError, ClientError) as err:
-            raise VkApiError("VK long poll: network error") from err
+            raise VkLongPollError("VK long poll: network error") from err
 
         if not isinstance(payload, dict):
-            raise VkApiError("VK long poll: invalid response from VK")
+            raise VkLongPollError("VK long poll: invalid response from VK")
 
         failed = payload.get("failed")
         if failed is not None:
             try:
                 failed_code = int(failed)
             except (TypeError, ValueError) as err:
-                raise VkApiError("VK long poll: invalid failure code") from err
+                raise VkLongPollError("VK long poll: invalid failure code") from err
 
             if failed_code == 1:
                 ts = payload.get("ts")
                 if ts is None:
-                    raise VkApiError("VK long poll: missing ts after failed=1")
+                    raise VkLongPollError("VK long poll: missing ts after failed=1")
                 return server.with_ts(ts), []
 
             if failed_code in (2, 3):
                 return await self.async_get_long_poll_server(), []
 
-            raise VkApiError(f"VK long poll: failed={failed_code}")
+            raise VkLongPollError(f"VK long poll: failed={failed_code}")
 
         updates = payload.get("updates")
         ts = payload.get("ts")
         if not isinstance(updates, list) or ts is None:
-            raise VkApiError("VK long poll: missing updates payload")
+            raise VkLongPollError("VK long poll: missing updates payload")
 
         normalized_updates = [item for item in updates if isinstance(item, dict)]
         return server.with_ts(ts), normalized_updates
@@ -391,12 +434,10 @@ class VkClient:
                 content_type,
                 filename,
             )
-        except VkApiError as err:
-            if _is_invalid_token_error(str(err)):
-                raise VkApiError("VK wall access token is invalid") from err
-            if "group authorization failed" in str(err).lower():
+        except VkAuthError as err:
+            if err.code == VK_ERROR_GROUP_AUTH_FAILED:
                 return await self._save_video_document_attachment(content, content_type, filename)
-            raise
+            raise VkAuthError("VK wall access token is invalid", code=err.code) from err
 
     async def async_send_post(self, message: str, image_url: str | None = None) -> dict[str, Any]:
         """Create a wall post, optionally with an uploaded image."""
@@ -626,7 +667,7 @@ class VkClient:
                     raise VkApiError(f"{method}: {await _summarize_response(response)}")
                 data = await response.json(content_type=None)
         except (TimeoutError, ClientError) as err:
-            raise VkApiError(f"{method}: network error") from err
+            raise VkNetworkError(f"{method}: network error") from err
 
         if not isinstance(data, dict):
             raise VkApiError(f"{method}: invalid response from VK")
@@ -634,7 +675,10 @@ class VkClient:
         error = data.get("error")
         if error:
             message = error.get("error_msg", "Unknown VK API error")
-            raise VkApiError(f"{method}: {message}")
+            code = _coerce_int(error.get("error_code"))
+            if code in VK_AUTH_ERROR_CODES:
+                raise VkAuthError(f"{method}: {message}", code=code)
+            raise VkApiError(f"{method}: {message}", code=code)
 
         if "response" not in data:
             raise VkApiError(f"{method}: missing response payload")
@@ -680,13 +724,6 @@ def _extract_doc_info(save_response: Any) -> dict[str, Any]:
     if isinstance(save_response, list):
         return _first_item(save_response, "document")
     raise VkApiError("Invalid document data from VK API")
-
-
-def _is_invalid_token_error(message: str) -> bool:
-    """Return True when VK reports an invalid or denied token."""
-
-    lower = message.lower()
-    return "invalid access token" in lower or "access denied" in lower
 
 
 def _first_item(value: Any, label: str) -> dict[str, Any]:
