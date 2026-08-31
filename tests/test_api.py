@@ -26,10 +26,17 @@ from custom_components.ha_vk.api import (
 class MockAsyncResponse:
     """Small async context manager for mocked aiohttp responses."""
 
-    def __init__(self, payload, status: int = 200) -> None:
+    def __init__(
+        self,
+        payload=None,
+        status: int = 200,
+        content_type: str = "application/json",
+        body: bytes = b"",
+    ) -> None:
         self._payload = payload
+        self._body = body
         self.status = status
-        self.headers = {"Content-Type": "application/json"}
+        self.headers = {"Content-Type": content_type}
 
     async def __aenter__(self):
         return self
@@ -39,6 +46,9 @@ class MockAsyncResponse:
 
     async def json(self, content_type=None):
         return self._payload
+
+    async def read(self):
+        return self._body
 
     async def text(self):
         return str(self._payload)
@@ -623,3 +633,109 @@ def test_build_client_config_truncates_float_send_retries() -> None:
     )
 
     assert config.send_retries == 2
+
+
+@pytest.mark.asyncio
+async def test_download_file_retries_network_errors() -> None:
+    """Media downloads should be retried on transport failures."""
+
+    session = Mock()
+    session.get = Mock(
+        side_effect=[
+            ClientError(),
+            MockAsyncResponse(content_type="image/jpeg", body=b"img"),
+        ]
+    )
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=1))
+
+    with patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock) as sleep:
+        content, content_type, filename = await client._download_file(
+            "http://example.com/pic.jpg",
+            "image/",
+        )
+
+    assert content == b"img"
+    assert content_type == "image/jpeg"
+    assert filename == "pic.jpg"
+    assert session.get.call_count == 2
+    sleep.assert_awaited_once_with(1.0)
+
+
+@pytest.mark.asyncio
+async def test_upload_file_retries_network_errors() -> None:
+    """Uploads to VK upload servers should be retried on transport failures."""
+
+    session = Mock()
+    session.post = Mock(side_effect=[TimeoutError(), MockAsyncResponse({"photo": "data"})])
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=1))
+
+    with patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock) as sleep:
+        payload = await client._upload_file(
+            "http://upload.example.com",
+            field_name="photo",
+            filename="pic.jpg",
+            content=b"img",
+            content_type="image/jpeg",
+        )
+
+    assert payload == {"photo": "data"}
+    assert session.post.call_count == 2
+    sleep.assert_awaited_once_with(1.0)
+
+
+@pytest.mark.asyncio
+async def test_upload_file_builds_fresh_form_per_attempt() -> None:
+    """Each upload attempt must send a freshly built FormData."""
+
+    session = Mock()
+    session.post = Mock(side_effect=[TimeoutError(), MockAsyncResponse({"photo": "data"})])
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=1))
+
+    with patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock):
+        await client._upload_file(
+            "http://upload.example.com",
+            field_name="photo",
+            filename="pic.jpg",
+            content=b"img",
+            content_type="image/jpeg",
+        )
+
+    forms = [call.kwargs["data"] for call in session.post.call_args_list]
+    assert len(forms) == 2
+    assert forms[0] is not forms[1]
+
+
+@pytest.mark.asyncio
+async def test_api_call_keeps_random_id_across_retries() -> None:
+    """Retried messages.send attempts must reuse the same random_id for VK dedup."""
+
+    session = Mock()
+    session.post = Mock(
+        side_effect=[ClientError(), ClientError(), MockAsyncResponse({"response": 1})]
+    )
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=3))
+
+    with patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock):
+        await client._api_call("messages.send", token="token", random_id=12345, message="hi")
+
+    random_ids = {call.kwargs["data"]["random_id"] for call in session.post.call_args_list}
+    assert session.post.call_count == 3
+    assert random_ids == {12345}
+
+
+@pytest.mark.asyncio
+async def test_api_call_does_not_retry_http_errors() -> None:
+    """HTTP >= 400 responses are server answers, not transport failures — no retry."""
+
+    session = Mock()
+    session.post = Mock(return_value=MockAsyncResponse({}, status=500))
+    client = VkClient(session, VkClientConfig(access_token="token", peer_id=1, send_retries=3))
+
+    with (
+        patch("custom_components.ha_vk.api.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        pytest.raises(VkApiError),
+    ):
+        await client._api_call("messages.send", token="token")
+
+    assert session.post.call_count == 1
+    sleep.assert_not_awaited()
