@@ -12,7 +12,11 @@
           "enable_incoming_messages": "Enable incoming VK messages",
           "vk_wall_access_token": "VK wall access token",
           "vk_api_version": "VK API version",
-          "request_timeout": "Request timeout"
+          "request_timeout": "Request timeout",
+          "send_retries": "Send retries on network errors"
+        },
+        "data_description": {
+          "send_retries": "Extra attempts on transient network errors with increasing pauses. 0 disables retries."
         }
       },
       "reauth_confirm": {
@@ -48,7 +52,11 @@
           "enable_incoming_messages": "Enable incoming VK messages",
           "vk_wall_access_token": "VK wall access token",
           "vk_api_version": "VK API version",
-          "request_timeout": "Request timeout"
+          "request_timeout": "Request timeout",
+          "send_retries": "Send retries on network errors"
+        },
+        "data_description": {
+          "send_retries": "Extra attempts on transient network errors with increasing pauses. 0 disables retries."
         }
       }
     },

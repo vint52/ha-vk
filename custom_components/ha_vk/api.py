@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import mimetypes
 import secrets
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -14,6 +16,10 @@ from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout, F
 from .const import (
     DEFAULT_API_VERSION,
     DEFAULT_REQUEST_TIMEOUT,
+    DEFAULT_SEND_RETRIES,
+    LOGGER,
+    SEND_RETRY_BACKOFF_BASE,
+    SEND_RETRY_MAX_DELAY,
     SEND_TYPE_DOCUMENT,
     SEND_TYPE_VIDEO,
 )
@@ -81,6 +87,7 @@ class VkClientConfig:
     group_id: int | None = None
     api_version: str = DEFAULT_API_VERSION
     request_timeout: float = DEFAULT_REQUEST_TIMEOUT
+    send_retries: int = DEFAULT_SEND_RETRIES
 
 
 @dataclass(slots=True, frozen=True)
@@ -119,6 +126,14 @@ def build_client_config(data: dict[str, Any]) -> VkClientConfig:
         "Request timeout",
     )
 
+    send_retries_raw = data.get("send_retries", DEFAULT_SEND_RETRIES)
+    try:
+        send_retries = int(float(send_retries_raw))
+    except (TypeError, ValueError, OverflowError) as err:
+        raise VkConfigError("Send retries must be an integer") from err
+    if send_retries < 0:
+        raise VkConfigError("Send retries must be zero or greater")
+
     return VkClientConfig(
         access_token=access_token,
         peer_id=peer_id,
@@ -127,6 +142,7 @@ def build_client_config(data: dict[str, Any]) -> VkClientConfig:
         group_id=group_id,
         api_version=api_version,
         request_timeout=request_timeout,
+        send_retries=send_retries,
     )
 
 
@@ -456,6 +472,7 @@ class VkClient:
             token=token,
             owner_id=-self._config.group_id,
             from_group=1,
+            guid=_random_id(),
             message=message,
             attachments=attachments,
         )
@@ -595,12 +612,22 @@ class VkClient:
         """Download and validate a remote media file."""
 
         timeout = ClientTimeout(total=self._config.request_timeout)
-        try:
-            async with self._session.get(source_url, timeout=timeout, allow_redirects=True) as response:
+
+        async def _request() -> tuple[bytes, str]:
+            async with self._session.get(
+                source_url,
+                timeout=timeout,
+                allow_redirects=True,
+            ) as response:
                 if response.status >= 400:
                     raise VkApiError(f"Failed to download file ({await _summarize_response(response)})")
-                content = await response.read()
-                content_type = response.headers.get("Content-Type", "").split(";")[0].strip()
+                downloaded = await response.read()
+                return downloaded, response.headers.get("Content-Type", "").split(";")[0].strip()
+
+        parsed_url = urlparse(source_url)
+        label = f"download {parsed_url.netloc}{parsed_url.path}"
+        try:
+            content, content_type = await self._with_retries(label, _request)
         except (TimeoutError, ClientError) as err:
             raise VkApiError("Failed to download media file") from err
 
@@ -631,15 +658,18 @@ class VkClient:
     ) -> dict[str, Any]:
         """Upload a media file to a VK upload URL."""
 
-        form = FormData()
-        form.add_field(field_name, content, filename=filename, content_type=content_type)
-
         timeout = ClientTimeout(total=self._config.request_timeout)
-        try:
+
+        async def _request() -> Any:
+            form = FormData()
+            form.add_field(field_name, content, filename=filename, content_type=content_type)
             async with self._session.post(upload_url, data=form, timeout=timeout) as response:
                 if response.status >= 400:
                     raise VkApiError(f"Upload failed ({await _summarize_response(response)})")
-                payload = await response.json(content_type=None)
+                return await response.json(content_type=None)
+
+        try:
+            payload = await self._with_retries(f"upload {field_name} to VK", _request)
         except (TimeoutError, ClientError) as err:
             raise VkApiError("Failed to upload media to VK") from err
 
@@ -647,6 +677,30 @@ class VkClient:
             raise VkApiError("Upload response from VK is invalid")
 
         return payload
+
+    async def _with_retries(self, label: str, request: Callable[[], Awaitable[Any]]) -> Any:
+        """Run a network request, retrying transport failures with backoff."""
+
+        # max(1, ...) tolerates hand-built configs; build_client_config already rejects negatives.
+        attempts = max(1, self._config.send_retries + 1)
+        for attempt in range(attempts):
+            try:
+                return await request()
+            except (TimeoutError, ClientError):
+                if attempt + 1 >= attempts:
+                    raise
+                # The exponent clamp guards 2**attempt against absurd retry counts;
+                # SEND_RETRY_MAX_DELAY binds far earlier for sane configs.
+                delay = min(SEND_RETRY_BACKOFF_BASE * 2 ** min(attempt, 16), SEND_RETRY_MAX_DELAY)
+                LOGGER.warning(
+                    "%s: network error, retry %d/%d in %.0fs",
+                    label,
+                    attempt + 1,
+                    attempts - 1,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+        raise RuntimeError("unreachable")  # pragma: no cover
 
     async def _api_call(self, method: str, token: str, **params: Any) -> Any:
         """Call a VK API method and return its `response` payload."""
@@ -658,7 +712,8 @@ class VkClient:
         payload.update({key: value for key, value in params.items() if value is not None})
 
         timeout = ClientTimeout(total=self._config.request_timeout)
-        try:
+
+        async def _request() -> Any:
             async with self._session.post(
                 f"{VK_API_BASE}/{method}",
                 data=payload,
@@ -666,7 +721,10 @@ class VkClient:
             ) as response:
                 if response.status >= 400:
                     raise VkApiError(f"{method}: {await _summarize_response(response)}")
-                data = await response.json(content_type=None)
+                return await response.json(content_type=None)
+
+        try:
+            data = await self._with_retries(method, _request)
         except (TimeoutError, ClientError) as err:
             raise VkNetworkError(f"{method}: network error") from err
 
