@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant
 
 from custom_components.ha_vk.const import DOMAIN
+from custom_components.ha_vk.receiver import HaVkEntryRuntime
 from custom_components.ha_vk.services import MESSAGE_SERVICE_SCHEMA, async_register_services
 
 
@@ -37,7 +38,7 @@ async def test_send_message_service_passes_media_fields_to_client(hass: HomeAssi
     client = Mock()
     client.async_send_message = AsyncMock()
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN]["entry-1"] = client
+    hass.data[DOMAIN]["entry-1"] = HaVkEntryRuntime(client=client)
 
     await async_register_services(hass)
 

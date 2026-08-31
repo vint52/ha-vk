@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import mimetypes
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -53,7 +52,7 @@ class VkLongPollServer:
     key: str
     ts: str
 
-    def with_ts(self, ts: Any) -> "VkLongPollServer":
+    def with_ts(self, ts: Any) -> VkLongPollServer:
         """Return a new server state with an updated ts cursor."""
 
         return replace(self, ts=str(ts))
@@ -249,7 +248,7 @@ class VkClient:
                 if response.status >= 400:
                     raise VkApiError(f"VK long poll: {await _summarize_response(response)}")
                 payload = await response.json(content_type=None)
-        except (ClientError, asyncio.TimeoutError) as err:
+        except (TimeoutError, ClientError) as err:
             raise VkApiError("VK long poll: network error") from err
 
         if not isinstance(payload, dict):
@@ -333,17 +332,13 @@ class VkClient:
         if image_url and video_url:
             raise VkApiError("Only one of image_url or video_url can be provided")
 
-        if image_url:
-            return await self._send_attachment(
-                await self._upload_message_image(image_url),
-                format_service_message(message, title),
+        if image_url or video_url:
+            attachment = (
+                await self._upload_message_image(image_url)
+                if image_url
+                else await self._upload_video_attachment(video_url, send_type)
             )
-
-        if video_url:
-            return await self._send_attachment(
-                await self._upload_video_attachment(video_url, send_type),
-                format_service_message(message, title),
-            )
+            return await self._send_attachment(attachment, format_service_message(message, title))
 
         payload = {
             "peer_id": self._config.peer_id,
@@ -353,34 +348,16 @@ class VkClient:
         response = await self._api_call("messages.send", token=self._config.access_token, **payload)
         return {"response": response}
 
-    async def async_send_image(self, image_url: str) -> dict[str, Any]:
-        """Download an image and send it to VK messages."""
-
-        return await self._send_attachment(await self._upload_message_image(image_url))
-
     async def _upload_message_image(self, image_url: str) -> str:
         """Upload an image and return its VK attachment identifier."""
 
-        content, content_type, filename = await self._download_file(image_url, "image/")
-        upload = await self._api_call(
-            "photos.getMessagesUploadServer",
+        return await self._upload_photo_attachment(
+            image_url,
             token=self._config.access_token,
-            peer_id=self._config.peer_id,
+            get_server_method="photos.getMessagesUploadServer",
+            save_method="photos.saveMessagesPhoto",
+            server_params={"peer_id": self._config.peer_id},
         )
-        upload_response = await self._upload_file(
-            upload["upload_url"],
-            field_name="photo",
-            filename=filename,
-            content=content,
-            content_type=content_type,
-        )
-        photos = await self._api_call(
-            "photos.saveMessagesPhoto",
-            token=self._config.access_token,
-            **upload_response,
-        )
-        photo_info = _first_item(photos, "photo")
-        return _photo_attachment(photo_info)
 
     async def async_send_video(
         self,
@@ -403,15 +380,12 @@ class VkClient:
             ("video/", "application/octet-stream"),
         )
 
-        if send_type == SEND_TYPE_DOCUMENT:
-            return await self._save_video_document_attachment(content, content_type, filename)
-
-        if not self._config.wall_access_token:
-            return await self._save_video_document_attachment(content, content_type, filename)
-
         upload_token = self._config.wall_access_token
+        if send_type == SEND_TYPE_DOCUMENT or not upload_token:
+            return await self._save_video_document_attachment(content, content_type, filename)
+
         try:
-            attachment = await self._save_video_attachment(
+            return await self._save_video_attachment(
                 upload_token,
                 content,
                 content_type,
@@ -423,8 +397,6 @@ class VkClient:
             if "group authorization failed" in str(err).lower():
                 return await self._save_video_document_attachment(content, content_type, filename)
             raise
-
-        return attachment
 
     async def async_send_post(self, message: str, image_url: str | None = None) -> dict[str, Any]:
         """Create a wall post, optionally with an uploaded image."""
@@ -466,12 +438,28 @@ class VkClient:
         if self._config.group_id is None:
             raise VkConfigError("VK group ID is required for wall photo uploads")
 
-        content, content_type, filename = await self._download_file(image_url, "image/")
-        upload = await self._api_call(
-            "photos.getWallUploadServer",
+        return await self._upload_photo_attachment(
+            image_url,
             token=token,
-            group_id=self._config.group_id,
+            get_server_method="photos.getWallUploadServer",
+            save_method="photos.saveWallPhoto",
+            server_params={"group_id": self._config.group_id},
+            save_params={"group_id": self._config.group_id},
         )
+
+    async def _upload_photo_attachment(
+        self,
+        image_url: str,
+        token: str,
+        get_server_method: str,
+        save_method: str,
+        server_params: dict[str, Any],
+        save_params: dict[str, Any] | None = None,
+    ) -> str:
+        """Download a photo, push it through a VK upload server, and save it."""
+
+        content, content_type, filename = await self._download_file(image_url, "image/")
+        upload = await self._api_call(get_server_method, token=token, **server_params)
         upload_response = await self._upload_file(
             upload["upload_url"],
             field_name="photo",
@@ -479,14 +467,13 @@ class VkClient:
             content=content,
             content_type=content_type,
         )
-        upload_response["group_id"] = self._config.group_id
         photos = await self._api_call(
-            "photos.saveWallPhoto",
+            save_method,
             token=token,
+            **(save_params or {}),
             **upload_response,
         )
-        photo_info = _first_item(photos, "photo")
-        return _photo_attachment(photo_info)
+        return _photo_attachment(_first_item(photos, "photo"))
 
     async def _save_video_attachment(
         self,
@@ -523,18 +510,6 @@ class VkClient:
             raise VkApiError("Invalid video data from VK API")
 
         return _build_attachment("video", owner_id, video_id, response.get("access_key"))
-
-    async def _send_video_as_document(
-        self,
-        content: bytes,
-        content_type: str,
-        filename: str,
-    ) -> dict[str, Any]:
-        """Fallback upload path for videos when video.save is unavailable."""
-
-        return await self._send_attachment(
-            await self._save_video_document_attachment(content, content_type, filename)
-        )
 
     async def _save_video_document_attachment(
         self,
@@ -584,7 +559,7 @@ class VkClient:
                     raise VkApiError(f"Failed to download file ({await _summarize_response(response)})")
                 content = await response.read()
                 content_type = response.headers.get("Content-Type", "").split(";")[0].strip()
-        except (ClientError, asyncio.TimeoutError) as err:
+        except (TimeoutError, ClientError) as err:
             raise VkApiError("Failed to download media file") from err
 
         if not content:
@@ -623,7 +598,7 @@ class VkClient:
                 if response.status >= 400:
                     raise VkApiError(f"Upload failed ({await _summarize_response(response)})")
                 payload = await response.json(content_type=None)
-        except (ClientError, asyncio.TimeoutError) as err:
+        except (TimeoutError, ClientError) as err:
             raise VkApiError("Failed to upload media to VK") from err
 
         if not isinstance(payload, dict):
@@ -649,22 +624,22 @@ class VkClient:
             ) as response:
                 if response.status >= 400:
                     raise VkApiError(f"{method}: {await _summarize_response(response)}")
-                payload = await response.json(content_type=None)
-        except (ClientError, asyncio.TimeoutError) as err:
+                data = await response.json(content_type=None)
+        except (TimeoutError, ClientError) as err:
             raise VkApiError(f"{method}: network error") from err
 
-        if not isinstance(payload, dict):
+        if not isinstance(data, dict):
             raise VkApiError(f"{method}: invalid response from VK")
 
-        error = payload.get("error")
+        error = data.get("error")
         if error:
             message = error.get("error_msg", "Unknown VK API error")
             raise VkApiError(f"{method}: {message}")
 
-        if "response" not in payload:
+        if "response" not in data:
             raise VkApiError(f"{method}: missing response payload")
 
-        return payload["response"]
+        return data["response"]
 
 
 def _filename_from_url(source_url: str, content_type: str) -> str:
@@ -701,8 +676,6 @@ def _extract_doc_info(save_response: Any) -> dict[str, Any]:
     """Normalize document save response shapes from VK."""
 
     if isinstance(save_response, dict) and "doc" in save_response:
-        return save_response["doc"]
-    if isinstance(save_response, dict) and save_response.get("type") == "doc" and "doc" in save_response:
         return save_response["doc"]
     if isinstance(save_response, list):
         return _first_item(save_response, "document")

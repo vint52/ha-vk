@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.const import CONF_NAME
+from homeassistant.const import CONF_NAME as CONF_NAME  # noqa: PLC0414
 
 DOMAIN = "ha_vk"
 LOGGER = logging.getLogger(__package__)
@@ -35,17 +35,3 @@ ATTR_VIDEO = "video"
 
 SEND_TYPE_VIDEO = "video"
 SEND_TYPE_DOCUMENT = "document"
-
-ENTRY_DATA_KEYS: tuple[str, ...] = (
-    CONF_NAME,
-    CONF_VK_ACCESS_TOKEN,
-    CONF_PEER_ID,
-    CONF_GROUP_ID,
-)
-
-ENTRY_OPTION_KEYS: tuple[str, ...] = (
-    CONF_ENABLE_INCOMING_MESSAGES,
-    CONF_VK_WALL_ACCESS_TOKEN,
-    CONF_API_VERSION,
-    CONF_REQUEST_TIMEOUT,
-)

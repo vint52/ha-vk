@@ -10,6 +10,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import VkApiError, VkConfigError
 from .const import DEFAULT_NAME, DOMAIN
+from .receiver import HaVkEntryRuntime
 
 
 async def async_setup_entry(
@@ -30,8 +31,8 @@ class HaVkNotifyEntity(NotifyEntity):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the notify entity."""
 
-        runtime = hass.data[DOMAIN][entry.entry_id]
-        self._client = getattr(runtime, "client", runtime)
+        runtime: HaVkEntryRuntime = hass.data[DOMAIN][entry.entry_id]
+        self._client = runtime.client
         self._attr_name = entry.title or DEFAULT_NAME
         self._attr_unique_id = entry.entry_id
 
